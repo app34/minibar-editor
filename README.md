@@ -1,3 +1,11 @@
+# Minibar
+
+Same UI as Super App Minibar (Beach / Water grid + item sheet).
+Import the existing month .xlsx, tap villa, +/- items, Share / XL writes the **same file** with colours kept.
+
+- Beach = 1xx–3xx
+- Water = 4xx–6xx
+
 # Minibar Workbook Editor
 
 Edit the existing **Minibar Consumption August 2026.xlsx** without building a new workbook.

@@ -1,26 +1,30 @@
-/* Minibar workbook editor
-   Loads the EXISTING .xlsx and writes cell VALUES only.
-   Styles, fills, fonts, merged cells, column widths and formulas stay in the same file.
-*/
+
 const $ = (id) => document.getElementById(id);
 
 const state = {
   workbook: null,
   fileName: "Minibar Consumption August 2026.xlsx",
   dirty: false,
-  mode: "daily",
+  zone: "Beach",
   daySheet: null,
   rooms: [],
   items: [],
   selectedRoom: null,
-  pickupHeaders: [],
+  sheetMode: false,
 };
 
-function setDirty(flag) {
-  state.dirty = flag;
-  $("dirtyLabel").textContent = flag ? "Unsaved changes" : "No changes";
-  document.querySelector(".status-bar").classList.toggle("dirty", flag);
-  $("saveBtn").disabled = !state.workbook;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+function zoneOf(room) {
+  const n = Number(String(room).replace(/\D/g, ""));
+  const block = Math.floor(n / 100);
+  return block <= 3 ? "Beach" : "Water";
 }
 
 function sheetDayNumber(name) {
@@ -51,45 +55,43 @@ function cellVal(ws, r, c) {
 }
 
 function setValueKeepStyle(ws, r, c, value) {
-  const cell = ws.getRow(r).getCell(c);
-  const next = value === "" || value === null || value === undefined ? null : value;
-  cell.value = next;
+  ws.getRow(r).getCell(c).value = value === "" || value == null ? null : value;
 }
 
 function classifyItem(name) {
   const n = String(name || "").toLowerCase();
-  if (/diet|zero|tonic|soda|ginger/.test(n)) return "flag";
-  if (/coca|sprite|softdrink/.test(n)) return "soft";
-  if (/peanut|crisp|cashew|pistachio|beet/.test(n)) return "food";
-  if (/wine|mancura|barone|bottega|pinot|merlot|sicil/.test(n)) return "wine";
-  if (/beer|grani|tagus|lion|saigon|xibeca|pilsner|royal|333/.test(n)) return "beer";
-  return "ok";
+  if (/peanut|crisp|cashew|pistachio|beet/.test(n)) return "snack";
+  if (/coca|sprite|softdrink|diet|zero|tonic|soda|ginger/.test(n)) return "soft";
+  if (/grani/.test(n)) return "snack";
+  if (/beer|wine|mancura|barone|bottega|pinot|merlot|sicil|tagus|lion|saigon|xibeca|pilsner|royal|333|alc/.test(n)) return "alc";
+  return "food";
 }
 
 function loadDailyMeta(ws) {
   const rooms = [];
-  const header = ws.getRow(2);
-  header.eachCell({ includeEmpty: false }, (cell, col) => {
+  ws.getRow(2).eachCell({ includeEmpty: false }, (cell, col) => {
     const v = cell.value;
-    if (typeof v === "number" || /^\d+$/.test(String(v))) {
-      rooms.push({ col, room: String(v) });
-    }
+    if (typeof v === "number" || /^\d+$/.test(String(v))) rooms.push({ col, room: String(v) });
   });
   const items = [];
   ws.eachRow({ includeEmpty: false }, (row, r) => {
     if (r < 3) return;
     const article = cellVal(ws, r, 2);
     if (!article || String(article).toLowerCase() === "total") return;
-    items.push({
-      row: r,
-      sno: cellVal(ws, r, 1),
-      name: String(article),
-      cat: classifyItem(article),
-    });
+    items.push({ row: r, name: String(article), cat: classifyItem(article) });
   });
   state.rooms = rooms;
   state.items = items;
   state.daySheet = ws;
+}
+
+function roomUsedCount(room) {
+  let n = 0;
+  state.items.forEach((item) => {
+    const q = Number(cellVal(state.daySheet, item.row, room.col)) || 0;
+    if (q) n += q;
+  });
+  return n;
 }
 
 function renderDaySelect() {
@@ -112,265 +114,157 @@ function onDayChange() {
   const ws = findSheet($("daySelect").value);
   if (!ws) return;
   loadDailyMeta(ws);
-  $("roomSearch").disabled = false;
-  renderRoomChips($("roomSearch").value);
-  if (state.selectedRoom && state.rooms.some((r) => r.room === state.selectedRoom.room)) {
-    const keep = state.rooms.find((r) => r.room === state.selectedRoom.room);
-    selectRoom(keep);
-  } else {
-    state.selectedRoom = null;
-    $("roomBanner").textContent = `${state.rooms.length} villas on ${ws.name.replace(/\s+/g, " ")} — pick a room`;
-    $("itemList").innerHTML = "";
-  }
-  $("metaLabel").textContent = `${state.items.length} items · ${state.rooms.length} rooms · ${state.workbook.worksheets.length} sheets`;
+  renderGrid();
 }
 
-function renderRoomChips(filter) {
-  const q = String(filter || "").trim();
-  const list = q ? state.rooms.filter((r) => r.room.includes(q)) : state.rooms;
-  const box = $("roomChips");
-  box.innerHTML = "";
-  list.slice(0, 40).forEach((r) => {
+function renderGrid() {
+  const q = String($("roomFilter").value || "").trim();
+  const list = state.rooms.filter((r) => zoneOf(r.room) === state.zone && (!q || r.room.includes(q)));
+  $("zoneTitle").textContent = `${state.zone.toUpperCase()} ZONE (${list.length})`;
+  const grid = $("villaGrid");
+  grid.innerHTML = "";
+  if (!state.workbook) {
+    grid.innerHTML = "";
+    return;
+  }
+  list.forEach((r) => {
+    const used = roomUsedCount(r);
     const b = document.createElement("button");
-    b.className = "chip" + (state.selectedRoom && state.selectedRoom.room === r.room ? " active" : "");
+    b.className = "villa-tile" + (used ? " done" : "");
     b.textContent = r.room;
-    b.onclick = () => selectRoom(r);
-    box.appendChild(b);
+    if (used) {
+      const badge = document.createElement("span");
+      badge.className = "count-badge";
+      badge.textContent = used;
+      b.appendChild(badge);
+    }
+    b.onclick = () => openRoom(r);
+    grid.appendChild(b);
   });
-  if (list.length > 40) {
-    const more = document.createElement("span");
-    more.className = "chip";
-    more.textContent = `+${list.length - 40}`;
-    box.appendChild(more);
-  }
 }
 
-function selectRoom(room) {
+function openRoom(room) {
   state.selectedRoom = room;
-  $("roomBanner").textContent = `Villa ${room.room}  ·  ${state.daySheet.name.replace(/\s+/g, " ")}`;
-  renderRoomChips($("roomSearch").value);
+  $("modalTitle").textContent = `${room.room} (${state.zone})`;
   renderItems();
+  $("roomModal").classList.add("open");
+}
+
+function closeRoom() {
+  $("roomModal").classList.remove("open");
+  renderGrid();
 }
 
 function renderItems() {
-  const ws = state.daySheet;
-  const room = state.selectedRoom;
-  const list = $("itemList");
-  list.innerHTML = "";
-  if (!ws || !room) return;
+  const box = $("itemGrid");
+  box.innerHTML = "";
+  if (!state.selectedRoom) return;
   state.items.forEach((item) => {
-    const raw = cellVal(ws, item.row, room.col);
-    const qty = raw == null || raw === "" ? 0 : Number(raw) || 0;
-    const el = document.createElement("article");
-    el.className = "item";
-    el.innerHTML = `
-      <div class="swatch cat-${item.cat}"></div>
-      <div>
-        <h3>${escapeHtml(item.name)}</h3>
-        <p>#${item.sno ?? "—"}</p>
-      </div>
+    const qty = Number(cellVal(state.daySheet, item.row, state.selectedRoom.col)) || 0;
+    const card = document.createElement("article");
+    card.className = "item-card cat-" + item.cat + (qty ? " has-qty" : "");
+    card.innerHTML = `
+      <div class="item-name">${escapeHtml(item.name)}</div>
       <div class="stepper">
-        <button type="button" data-act="-">−</button>
-        <input type="number" min="0" step="1" value="${qty || ""}" />
-        <button type="button" data-act="+">+</button>
+        <button class="btn-step" data-act="-">-</button>
+        <span class="step-val">${qty}</span>
+        <button class="btn-step" data-act="+">+</button>
       </div>`;
-    const input = el.querySelector("input");
+    const val = card.querySelector(".step-val");
     const write = (n) => {
-      const v = Math.max(0, Number(n) || 0);
-      input.value = v ? String(v) : "";
-      setValueKeepStyle(ws, item.row, room.col, v ? v : null);
-      setDirty(true);
+      const v = Math.max(0, n);
+      val.textContent = v;
+      card.classList.toggle("has-qty", v > 0);
+      setValueKeepStyle(state.daySheet, item.row, state.selectedRoom.col, v || null);
+      state.dirty = true;
     };
-    el.querySelector('[data-act="-"]').onclick = () => write((Number(input.value) || 0) - 1);
-    el.querySelector('[data-act="+"]').onclick = () => write((Number(input.value) || 0) + 1);
-    input.onchange = () => write(input.value);
-    list.appendChild(el);
+    card.querySelector('[data-act="-"]').onclick = () => write((Number(val.textContent) || 0) - 1);
+    card.querySelector('[data-act="+"]').onclick = () => write((Number(val.textContent) || 0) + 1);
+    box.appendChild(card);
   });
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (ch) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[ch]));
-}
-
-function renderPickup() {
-  const ws = findSheet("Pick up");
-  const table = $("pickupTable");
-  table.innerHTML = "";
-  if (!ws) { table.innerHTML = "<tr><td>No Pick up sheet</td></tr>"; return; }
-  const maxCol = ws.actualColumnCount || 24;
-  const maxRow = ws.actualRowCount || 32;
-  const head = document.createElement("thead");
-  const body = document.createElement("tbody");
-  for (let r = 1; r <= maxRow; r++) {
-    const tr = document.createElement("tr");
-    for (let c = 1; c <= maxCol; c++) {
-      const tag = r <= 3 ? "th" : "td";
-      const td = document.createElement(tag);
-      const val = cellVal(ws, r, c);
-      const cell = ws.getRow(r).getCell(c);
-      const isFormula = cell.value && typeof cell.value === "object" && cell.value.formula;
-      if (r > 3 && c >= 4 && !isFormula && typeof val !== "string") {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.value = val == null ? "" : val;
-        input.onchange = () => {
-          const n = input.value === "" ? null : Number(input.value);
-          setValueKeepStyle(ws, r, c, Number.isFinite(n) ? n : null);
-          setDirty(true);
-        };
-        td.appendChild(input);
-      } else {
-        td.textContent = val == null ? "" : val;
-        if (isFormula) td.title = "Formula kept as-is";
-      }
-      tr.appendChild(td);
-    }
-    (r <= 3 ? head : body).appendChild(tr);
-  }
-  table.appendChild(head);
-  table.appendChild(body);
-}
-
-function renderRooms() {
-  const ws = findSheet("Rooms");
-  const table = $("roomsTable");
-  table.innerHTML = "";
-  if (!ws) return;
-  const qRoom = $("roomsFilter").value.trim();
-  const qItem = $("roomsItemFilter").value.trim().toLowerCase();
-  const header = ws.getRow(2);
-  const roomCols = [];
-  header.eachCell({ includeEmpty: false }, (cell, col) => {
-    if (col === 1) return;
-    const v = cell.value;
-    if (v == null) return;
-    if (qRoom && !String(v).includes(qRoom)) return;
-    roomCols.push({ col, room: String(v) });
-  });
-  const shownCols = roomCols.slice(0, 25);
-  const thead = document.createElement("thead");
-  const hr = document.createElement("tr");
-  hr.innerHTML = "<th>Article</th>" + shownCols.map((c) => `<th>${escapeHtml(c.room)}</th>`).join("");
-  thead.appendChild(hr);
-  const body = document.createElement("tbody");
-  ws.eachRow({ includeEmpty: false }, (row, r) => {
-    if (r < 3) return;
-    const name = cellVal(ws, r, 1);
-    if (!name) return;
-    if (qItem && !String(name).toLowerCase().includes(qItem)) return;
-    const tr = document.createElement("tr");
-    const first = document.createElement("td");
-    first.textContent = name;
-    tr.appendChild(first);
-    shownCols.forEach((rc) => {
-      const td = document.createElement("td");
-      const cell = ws.getRow(r).getCell(rc.col);
-      const isFormula = cell.value && typeof cell.value === "object" && cell.value.formula;
-      const val = cellVal(ws, r, rc.col);
-      if (isFormula) {
-        td.textContent = val == null ? "" : val;
-        td.title = "Formula";
-      } else {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.value = val == null ? "" : val;
-        input.onchange = () => {
-          const n = input.value === "" ? null : Number(input.value);
-          setValueKeepStyle(ws, r, rc.col, Number.isFinite(n) ? n : null);
-          setDirty(true);
-        };
-        td.appendChild(input);
-      }
-      tr.appendChild(td);
-    });
-    body.appendChild(tr);
-  });
-  table.appendChild(thead);
-  table.appendChild(body);
-  if (roomCols.length > 25) {
-    const note = document.createElement("caption");
-    note.textContent = `Showing 25 of ${roomCols.length} matching rooms — type a room number to narrow`;
-    table.prepend(note);
-  }
-}
-
-function renderSummary() {
-  const ws = findSheet("Summary");
-  const table = $("summaryTable");
-  table.innerHTML = "";
-  if (!ws) return;
-  const maxCol = Math.min(ws.actualColumnCount || 48, 44);
-  const maxRow = ws.actualRowCount || 31;
-  for (let r = 1; r <= maxRow; r++) {
-    const tr = document.createElement("tr");
-    for (let c = 2; c <= maxCol; c++) {
-      const td = document.createElement(r <= 2 ? "th" : "td");
-      const val = cellVal(ws, r, c);
-      td.textContent = val == null ? "" : val;
-      tr.appendChild(td);
-    }
-    table.appendChild(tr);
-  }
-}
-
-function showMode(mode) {
-  state.mode = mode;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === mode));
-  $("dailyView").classList.toggle("hidden", mode !== "daily");
-  $("pickupView").classList.toggle("hidden", mode !== "pickup");
-  $("roomsView").classList.toggle("hidden", mode !== "rooms");
-  $("summaryView").classList.toggle("hidden", mode !== "summary");
-  $("dailyToolbar").classList.toggle("hidden", mode !== "daily");
-  if (!state.workbook) return;
-  if (mode === "pickup") renderPickup();
-  if (mode === "rooms") renderRooms();
-  if (mode === "summary") renderSummary();
+  return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
 async function openFile(file) {
-  const buf = await file.arrayBuffer();
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf);
-  state.workbook = wb;
-  state.fileName = file.name || state.fileName;
-  $("fileStatus").textContent = `Editing ${state.fileName} in place (styles kept)`;
-  $("emptyState").classList.add("hidden");
-  $("dailyView").classList.remove("hidden");
-  renderDaySelect();
-  setDirty(false);
-  showMode("daily");
+  $("loader").classList.remove("hidden");
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    state.workbook = wb;
+    state.fileName = file.name || state.fileName;
+    $("fileStatus").textContent = state.fileName;
+    $("saveBtn").disabled = false;
+    $("finishBtn").disabled = false;
+    renderDaySelect();
+    toast("Workbook loaded");
+  } catch (e) {
+    console.error(e);
+    toast("Could not open file");
+  } finally {
+    $("loader").classList.add("hidden");
+  }
 }
 
 async function saveSameFile() {
   if (!state.workbook) return;
-  const buf = await state.workbook.xlsx.writeBuffer();
-  const blob = new Blob([buf], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = state.fileName;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  setDirty(false);
+  $("loader").classList.remove("hidden");
+  try {
+    const buf = await state.workbook.xlsx.writeBuffer();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    a.download = state.fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    state.dirty = false;
+    toast("Saved " + state.fileName);
+  } finally {
+    $("loader").classList.add("hidden");
+  }
 }
 
-$("fileInput").addEventListener("change", (e) => {
-  const file = e.target.files && e.target.files[0];
-  if (file) openFile(file);
-});
-$("saveBtn").addEventListener("click", saveSameFile);
-$("daySelect").addEventListener("change", onDayChange);
-$("roomSearch").addEventListener("input", (e) => renderRoomChips(e.target.value));
-$("roomsFilter").addEventListener("input", renderRooms);
-$("roomsItemFilter").addEventListener("input", renderRooms);
-document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showMode(t.dataset.mode)));
+function cleanZone() {
+  if (!state.daySheet) return;
+  if (!confirm("Clear quantities for visible " + state.zone + " villas on this date?")) return;
+  const q = String($("roomFilter").value || "").trim();
+  state.rooms.filter((r) => zoneOf(r.room) === state.zone && (!q || r.room.includes(q))).forEach((room) => {
+    state.items.forEach((item) => setValueKeepStyle(state.daySheet, item.row, room.col, null));
+  });
+  state.dirty = true;
+  renderGrid();
+  toast("Zone cleared");
+}
 
-window.addEventListener("beforeunload", (e) => {
-  if (state.dirty) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-});
+function setZone(zone) {
+  state.zone = zone;
+  $("btnBeach").classList.toggle("active", zone === "Beach");
+  $("btnWater").classList.toggle("active", zone === "Water");
+  renderGrid();
+}
+
+$("btnBeach").onclick = () => setZone("Beach");
+$("btnWater").onclick = () => setZone("Water");
+$("daySelect").onchange = onDayChange;
+$("roomFilter").oninput = renderGrid;
+$("fileInput").onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) openFile(f); };
+$("saveBtn").onclick = saveSameFile;
+$("finishBtn").onclick = saveSameFile;
+$("cleanBtn").onclick = cleanZone;
+$("closeModalBtn").onclick = closeRoom;
+$("saveEntryBtn").onclick = () => { closeRoom(); toast("Local entry kept in file"); };
+$("sheetViewBtn").onclick = () => {
+  state.sheetMode = true;
+  $("modalCard").classList.add("sheet");
+  $("sheetViewBtn").classList.add("active");
+  $("fullViewBtn").classList.remove("active");
+};
+$("fullViewBtn").onclick = () => {
+  state.sheetMode = false;
+  $("modalCard").classList.remove("sheet");
+  $("fullViewBtn").classList.add("active");
+  $("sheetViewBtn").classList.remove("active");
+};
+$("roomModal").addEventListener("click", (e) => { if (e.target.id === "roomModal") closeRoom(); });
+window.addEventListener("beforeunload", (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ""; } });

@@ -2,90 +2,71 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Minibar</title>
+  <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Minibar Workbook Editor</title>
   <link rel="manifest" href="manifest.json" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="top">
-    <div>
-      <h1>Minibar Editor</h1>
-      <p class="sub" id="fileStatus">Load the existing .xlsx — colors, formulas and layout stay in the same file</p>
-    </div>
-    <div class="top-actions">
-      <label class="btn ghost" for="fileInput">Open XLSX</label>
-      <input id="fileInput" type="file" accept=".xlsx,.xlsm" hidden />
-      <button class="btn" id="saveBtn" disabled>Save same file</button>
+  <header class="top-header">
+    <div class="brand">Minibar</div>
+    <div class="header-controls">
+      <div class="zone-toggle">
+        <button class="toggle-btn active" id="btnBeach" data-zone="Beach">Beach</button>
+        <button class="toggle-btn" id="btnWater" data-zone="Water">Water</button>
+      </div>
+      <select id="daySelect" class="day-select" disabled title="Service date"></select>
     </div>
   </header>
 
-  <nav class="tabs" id="modeTabs">
-    <button class="tab active" data-mode="daily">Daily use</button>
-    <button class="tab" data-mode="pickup">Receiving</button>
-    <button class="tab" data-mode="rooms">Room stock</button>
-    <button class="tab" data-mode="summary">Summary</button>
-  </nav>
-
-  <section class="toolbar" id="dailyToolbar">
-    <label>
-      Date
-      <select id="daySelect" disabled></select>
-    </label>
-    <label class="grow">
-      Villa / room
-      <input id="roomSearch" type="search" inputmode="numeric" placeholder="Search 101, 420…" disabled />
-    </label>
-    <div id="roomChips" class="chips"></div>
-  </section>
-
-  <main id="app">
-    <div class="empty" id="emptyState">
-      <p>Open <strong>Minibar Consumption August 2026.xlsx</strong></p>
-      <p class="hint">The app writes values only. It does not create a new workbook, so colour codes, merged titles, column widths and SUM formulas stay exactly as they are.</p>
-    </div>
-
-    <div id="dailyView" class="view hidden">
-      <div class="room-banner" id="roomBanner">Select a villa</div>
-      <div id="itemList" class="item-list"></div>
-    </div>
-
-    <div id="pickupView" class="view hidden">
-      <div class="table-wrap">
-        <table id="pickupTable"></table>
+  <div class="viewport" id="homeView">
+    <div class="main-container">
+      <div class="control-toolbar">
+        <div class="search-box">
+          <input id="roomFilter" type="number" inputmode="numeric" placeholder="Filter room..." />
+        </div>
+        <button class="btn-cool btn-danger" id="cleanBtn" type="button">Clean</button>
+        <label class="btn-cool" for="fileInput">Import</label>
+        <input id="fileInput" type="file" accept=".xlsx,.xlsm" hidden />
+        <button class="btn-cool btn-success" id="saveBtn" type="button" disabled>Share / XL</button>
       </div>
+      <button class="btn-cool btn-primary" id="finishBtn" type="button" disabled>Finish Day</button>
+      <p class="file-hint" id="fileStatus">Import the month workbook to begin</p>
+      <h2 class="section-title" id="zoneTitle">BEACH ZONE (0)</h2>
+      <div class="villa-grid" id="villaGrid"></div>
     </div>
+  </div>
 
-    <div id="roomsView" class="view hidden">
-      <div class="toolbar tight">
-        <label class="grow">
-          Filter rooms
-          <input id="roomsFilter" type="search" inputmode="numeric" placeholder="Room number" />
-        </label>
-        <label class="grow">
-          Filter item
-          <input id="roomsItemFilter" type="search" placeholder="Item name" />
-        </label>
+  <div class="modal-overlay" id="roomModal">
+    <div class="modal-card" id="modalCard">
+      <header class="modal-header">
+        <div class="modal-title" id="modalTitle">Villa</div>
+        <div class="header-action-group">
+          <div class="view-mode-pill">
+            <button class="view-pill-btn" id="sheetViewBtn" type="button">Sheet</button>
+            <button class="view-pill-btn active" id="fullViewBtn" type="button">Full</button>
+          </div>
+          <button class="btn-action-icon" id="closeModalBtn" type="button">X</button>
+        </div>
+      </header>
+      <div class="category-legend">
+        <span class="legend-item"><i class="legend-swatch food"></i> Food</span>
+        <span class="legend-item"><i class="legend-swatch soft"></i> Soft Drinks</span>
+        <span class="legend-item"><i class="legend-swatch alc"></i> Alcohol</span>
+        <span class="legend-item"><i class="legend-swatch snack"></i> Snacks</span>
       </div>
-      <div class="table-wrap">
-        <table id="roomsTable"></table>
-      </div>
+      <div class="modal-body" id="itemGrid"></div>
+      <footer class="modal-footer">
+        <button class="save-entry" id="saveEntryBtn" type="button">Save Local Entry</button>
+      </footer>
     </div>
+  </div>
 
-    <div id="summaryView" class="view hidden">
-      <p class="hint pad">Read-only preview. Daily totals and receiving already flow into Summary with formulas. Save the file and open it in Excel to see recalculated monthly totals.</p>
-      <div class="table-wrap">
-        <table id="summaryTable"></table>
-      </div>
-    </div>
-  </main>
-
-  <footer class="status-bar">
-    <span id="dirtyLabel">No changes</span>
-    <span id="metaLabel"></span>
-  </footer>
+  <div class="toast-container"><div class="toast-msg" id="toast"></div></div>
+  <div class="loader hidden" id="loader"><span>Working...</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="app.js"></script>

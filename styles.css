@@ -1,0 +1,66 @@
+:root {
+  --bg: #0f1720;
+  --panel: #16202b;
+  --panel-2: #1c2836;
+  --line: #2a3a4d;
+  --text: #e8eef5;
+  --muted: #93a4b8;
+  --accent: #3db8a0;
+  --accent-2: #1f6f62;
+  --food: #ffc000;
+  --soft: #92d050;
+  --beer: #ffd966;
+  --beer2: #ffff00;
+  --flag: #ff4d4d;
+  --wine: #78bdfc;
+  --ok: #00b050;
+  --warn: #e8b339;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+body { min-height: 100dvh; display: flex; flex-direction: column; }
+.top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 14px 16px 8px; }
+h1 { margin: 0; font-size: 1.15rem; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
+.top-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn { background: var(--accent); color: #06231e; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+.tabs { display: flex; gap: 6px; padding: 0 12px 8px; overflow-x: auto; }
+.tab { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; white-space: nowrap; }
+.tab.active { background: var(--accent-2); color: white; border-color: var(--accent); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 12px 10px; align-items: end; }
+.toolbar.tight { padding-top: 8px; }
+.toolbar label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--muted); }
+.grow { flex: 1; min-width: 140px; }
+select, input { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 1rem; width: 100%; }
+.chips { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-bottom: 2px; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 8px 12px; white-space: nowrap; }
+.chip.active { background: var(--accent); color: #06231e; font-weight: 700; }
+main { flex: 1; padding: 0 12px 72px; }
+.empty { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 22px; }
+.hint { color: var(--muted); font-size: 0.88rem; }
+.hint.pad { padding: 8px 2px 12px; }
+.hidden { display: none !important; }
+.room-banner { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; font-weight: 700; }
+.item-list { display: flex; flex-direction: column; gap: 8px; }
+.item { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.swatch { width: 8px; height: 100%; min-height: 36px; border-radius: 99px; background: #445; }
+.item h3 { margin: 0; font-size: 0.95rem; }
+.item p { margin: 2px 0 0; color: var(--muted); font-size: 0.75rem; }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 40px; height: 40px; border-radius: 10px; border: 0; background: var(--panel-2); color: var(--text); font-size: 1.3rem; }
+.stepper input { width: 58px; text-align: center; padding: 8px 4px; }
+.table-wrap { overflow: auto; max-height: calc(100dvh - 250px); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; min-width: 100%; font-size: 0.78rem; }
+th, td { border: 1px solid var(--line); padding: 6px 8px; white-space: nowrap; }
+th { position: sticky; top: 0; background: #203040; z-index: 1; }
+td input { padding: 6px; min-width: 64px; }
+.status-bar { position: sticky; bottom: 0; display: flex; justify-content: space-between; gap: 8px; padding: 10px 14px; background: #101821; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); }
+.status-bar.dirty #dirtyLabel { color: var(--warn); font-weight: 700; }
+.cat-food { background: var(--food); }
+.cat-soft { background: var(--soft); }
+.cat-beer { background: var(--beer); }
+.cat-flag { background: var(--flag); }
+.cat-wine { background: var(--wine); }
+.cat-ok { background: var(--ok); }

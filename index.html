@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Minibar</title>
+  <title>Minibar XL</title>
   <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="top-header">
-    <div class="brand">Minibar</div>
+    <div class="brand">Minibar XL</div>
     <div class="header-controls">
       <div class="zone-toggle">
         <button class="toggle-btn active" id="btnBeach" data-zone="Beach">Beach</button>
@@ -29,10 +33,11 @@
           <input id="roomFilter" type="number" inputmode="numeric" placeholder="Filter room..." />
         </div>
         <button class="btn-cool btn-danger" id="cleanBtn" type="button">Clean</button>
-        <label class="btn-cool" for="fileInput">Import</label>
+        <label class="btn-cool" for="fileInput">Import XL</label>
         <input id="fileInput" type="file" accept=".xlsx,.xlsm" hidden />
+        <button class="btn-cool" id="importTextBtn" type="button" disabled>Import text</button>
         <button class="btn-cool btn-success" id="saveBtn" type="button" disabled>Save XL</button>
-        <button class="btn-cool btn-success" id="waBtn" type="button" disabled>WhatsApp XL</button>
+        <button class="btn-cool btn-success" id="waBtn" type="button" disabled>WhatsApp</button>
       </div>
       <button class="btn-cool btn-primary" id="finishBtn" type="button" disabled>Finish Day</button>
       <p class="file-hint" id="fileStatus">Import the month workbook to begin</p>
@@ -47,6 +52,7 @@
         <div class="modal-title" id="modalTitle">Villa</div>
         <div class="header-action-group">
           <div class="view-mode-pill">
+            <button class="view-pill-btn" id="usedOnlyBtn" type="button">Used</button>
             <button class="view-pill-btn" id="sheetViewBtn" type="button">Sheet</button>
             <button class="view-pill-btn active" id="fullViewBtn" type="button">Full</button>
           </div>
@@ -70,10 +76,32 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="textModal">
+    <div class="modal-card sheet text-card">
+      <header class="modal-header">
+        <div class="modal-title">Import text into selected date</div>
+        <button class="btn-action-icon" id="closeTextBtn" type="button">X</button>
+      </header>
+      <div class="text-import-body">
+        <p class="file-hint" id="textHint">Pick the month XL and a date first, then paste the minibar report.</p>
+        <textarea id="textArea" class="text-area" placeholder="--- MINIBAR REPORT (WATER) ---&#10;406: Potato Crisps=1, Cashew Salted=1, Coca Cola=2"></textarea>
+        <label class="chk"><input type="checkbox" id="replaceRooms" /> Replace whole villa first (clear then fill)</label>
+        <div class="save-row">
+          <button class="save-entry" id="applyTextBtn" type="button">Fill selected date</button>
+        </div>
+        <pre class="import-log" id="importLog"></pre>
+      </div>
+    </div>
+  </div>
   <div class="toast-container"><div class="toast-msg" id="toast"></div></div>
   <div class="loader hidden" id="loader"><span>Working...</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    }
+  </script>
 </body>
 </html>

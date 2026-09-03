@@ -58,6 +58,95 @@ function setValueKeepStyle(ws, r, c, value) {
   ws.getRow(r).getCell(c).value = value === "" || value == null ? null : value;
 }
 
+
+function colLetter(n) {
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function findHeaderCol(ws, name) {
+  const needle = String(name).toLowerCase();
+  let found = null;
+  ws.getRow(2).eachCell({ includeEmpty: false }, (cell, col) => {
+    if (String(cell.value || "").toLowerCase().trim() === needle) found = col;
+  });
+  return found;
+}
+
+function roomColumns(ws) {
+  return state.rooms.map((r) => r.col).sort((a, b) => a - b);
+}
+
+function sumItemRow(ws, row) {
+  let t = 0;
+  state.rooms.forEach((r) => {
+    t += Number(cellVal(ws, row, r.col)) || 0;
+  });
+  return t;
+}
+
+function refreshItemTotal(ws, row) {
+  const totalCol = findHeaderCol(ws, "Total") || 140;
+  const cols = roomColumns(ws);
+  if (!cols.length) return 0;
+  const start = colLetter(cols[0]);
+  const end = colLetter(cols[cols.length - 1]);
+  const sum = sumItemRow(ws, row);
+  const cell = ws.getRow(row).getCell(totalCol);
+  const existing = cell.value;
+  const formula = (existing && typeof existing === "object" && existing.formula)
+    ? existing.formula
+    : `SUM(${start}${row}:${end}${row})`;
+  cell.value = { formula, result: sum };
+  return sum;
+}
+
+function refreshDayTotals() {
+  if (!state.daySheet) return 0;
+  let grand = 0;
+  state.items.forEach((item) => {
+    grand += refreshItemTotal(state.daySheet, item.row);
+  });
+  updateSummaryForDay();
+  const el = $("dayTotal");
+  if (el) el.textContent = `Day total: ${grand} units`;
+  return grand;
+}
+
+function updateSummaryForDay() {
+  const summary = findSheet("Summary");
+  if (!summary || !state.daySheet) return;
+  const day = sheetDayNumber(state.daySheet.name);
+  if (!day) return;
+  let dayCol = null;
+  summary.getRow(2).eachCell({ includeEmpty: false }, (cell, col) => {
+    if (Number(cell.value) === day) dayCol = col;
+  });
+  if (!dayCol) return;
+  state.items.forEach((item) => {
+    const total = sumItemRow(state.daySheet, item.row);
+    let targetRow = null;
+    summary.eachRow({ includeEmpty: false }, (row, r) => {
+      if (r < 3) return;
+      const name = cellVal(summary, r, 3);
+      if (name && String(name).toLowerCase() === item.name.toLowerCase()) targetRow = r;
+    });
+    if (!targetRow) return;
+    const cell = summary.getRow(targetRow).getCell(dayCol);
+    const existing = cell.value;
+    if (existing && typeof existing === "object" && existing.formula) {
+      cell.value = { formula: existing.formula, result: total };
+    } else {
+      cell.value = total || null;
+    }
+  });
+}
+
 function classifyItem(name) {
   const n = String(name || "").toLowerCase();
   if (/peanut|crisp|cashew|pistachio|beet/.test(n)) return "snack";
@@ -114,6 +203,7 @@ function onDayChange() {
   const ws = findSheet($("daySelect").value);
   if (!ws) return;
   loadDailyMeta(ws);
+  refreshDayTotals();
   renderGrid();
 }
 
@@ -147,6 +237,7 @@ function openRoom(room) {
   state.selectedRoom = room;
   $("modalTitle").textContent = `${room.room} (${state.zone})`;
   renderItems();
+  refreshDayTotals();
   $("roomModal").classList.add("open");
 }
 
@@ -177,6 +268,7 @@ function renderItems() {
       card.classList.toggle("has-qty", v > 0);
       setValueKeepStyle(state.daySheet, item.row, state.selectedRoom.col, v || null);
       state.dirty = true;
+      refreshDayTotals();
     };
     card.querySelector('[data-act="-"]').onclick = () => write((Number(val.textContent) || 0) - 1);
     card.querySelector('[data-act="+"]').onclick = () => write((Number(val.textContent) || 0) + 1);
@@ -198,6 +290,7 @@ async function openFile(file) {
     $("fileStatus").textContent = state.fileName;
     $("saveBtn").disabled = false;
     $("finishBtn").disabled = false;
+    if ($("waBtn")) $("waBtn").disabled = false;
     renderDaySelect();
     toast("Workbook loaded");
   } catch (e) {
@@ -212,6 +305,7 @@ async function saveSameFile() {
   if (!state.workbook) return;
   $("loader").classList.remove("hidden");
   try {
+    refreshDayTotals();
     const buf = await state.workbook.xlsx.writeBuffer();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -233,8 +327,48 @@ function cleanZone() {
     state.items.forEach((item) => setValueKeepStyle(state.daySheet, item.row, room.col, null));
   });
   state.dirty = true;
+  refreshDayTotals();
   renderGrid();
   toast("Zone cleared");
+}
+
+
+async function workbookFile() {
+  refreshDayTotals();
+  const buf = await state.workbook.xlsx.writeBuffer();
+  return new File([buf], state.fileName, {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+async function shareWhatsApp() {
+  if (!state.workbook) return;
+  $("loader").classList.remove("hidden");
+  try {
+    const file = await workbookFile();
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: state.fileName,
+        text: "Minibar " + (state.daySheet ? state.daySheet.name.replace(/\s+/g, " ") : ""),
+      });
+      state.dirty = false;
+      toast("Shared to WhatsApp / apps");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = state.fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("XL downloaded — attach it in WhatsApp");
+  } catch (e) {
+    if (String(e.name) === "AbortError") return;
+    console.error(e);
+    toast("Share cancelled");
+  } finally {
+    $("loader").classList.add("hidden");
+  }
 }
 
 function setZone(zone) {

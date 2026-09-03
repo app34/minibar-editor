@@ -31,7 +31,8 @@
         <button class="btn-cool btn-danger" id="cleanBtn" type="button">Clean</button>
         <label class="btn-cool" for="fileInput">Import</label>
         <input id="fileInput" type="file" accept=".xlsx,.xlsm" hidden />
-        <button class="btn-cool btn-success" id="saveBtn" type="button" disabled>Share / XL</button>
+        <button class="btn-cool btn-success" id="saveBtn" type="button" disabled>Save XL</button>
+        <button class="btn-cool btn-success" id="waBtn" type="button" disabled>WhatsApp XL</button>
       </div>
       <button class="btn-cool btn-primary" id="finishBtn" type="button" disabled>Finish Day</button>
       <p class="file-hint" id="fileStatus">Import the month workbook to begin</p>
@@ -60,7 +61,11 @@
       </div>
       <div class="modal-body" id="itemGrid"></div>
       <footer class="modal-footer">
-        <button class="save-entry" id="saveEntryBtn" type="button">Save Local Entry</button>
+        <div class="day-total" id="dayTotal">Day total: 0</div>
+        <div class="save-row">
+          <button class="save-entry" id="saveEntryBtn" type="button">Save Local Entry</button>
+          <button class="btn-wa" id="waEntryBtn" type="button">WhatsApp</button>
+        </div>
       </footer>
     </div>
   </div>

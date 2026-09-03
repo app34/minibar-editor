@@ -184,6 +184,15 @@ function roomUsedCount(room) {
   return n;
 }
 
+function pickDefaultSheet(names) {
+  const today = new Date().getDate();
+  const rows = names.map((n) => ({ n, d: sheetDayNumber(n) })).filter((x) => x.d != null);
+  const exact = rows.find((x) => x.d === today);
+  if (exact) return exact.n;
+  rows.sort((a, b) => Math.abs(a.d - today) - Math.abs(b.d - today) || b.d - a.d);
+  return (rows[0] && rows[0].n) || names[names.length - 1] || names[0];
+}
+
 function renderDaySelect() {
   const sel = $("daySelect");
   sel.innerHTML = "";
@@ -195,10 +204,8 @@ function renderDaySelect() {
   });
   sel.disabled = false;
   if (sel.options.length) {
-    const today = new Date().getDate();
     const names = [...sel.options].map((o) => o.value);
-    const todaySheet = names.find((n) => sheetDayNumber(n) === today);
-    sel.value = todaySheet || names[names.length - 1];
+    sel.value = pickDefaultSheet(names);
     onDayChange();
   }
 }
@@ -586,15 +593,173 @@ function zipOneFile(name, data) {
   return out;
 }
 
-function shareFilesNow(files) {
-  if (!navigator.share) return Promise.reject(new Error("no share"));
-  const clean = files.filter(Boolean);
-  for (const file of clean) {
-    const opt = { files: [file], title: file.name };
-    if (navigator.canShare && !navigator.canShare({ files: [file] })) continue;
-    return navigator.share(opt);
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+state.installEvent = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  state.installEvent = e;
+});
+
+function makeShareFiles() {
+  const buf = state.cachedBuf;
+  if (!buf) return [];
+  const base = (state.fileName || "Minibar.xlsx").replace(/\.xlsx$/i, "");
+  const xlsx = new File([buf], base + ".xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const excel = new File([buf], base + ".xlsx", { type: "application/vnd.ms-excel" });
+  const raw = new File([buf], base + ".xlsx", { type: "application/octet-stream" });
+  const zip = new File([zipOneFile(base + ".xlsx", buf)], base + ".zip", { type: "application/zip" });
+  return [xlsx, excel, raw, zip];
+}
+
+async function tryShareFile(file) {
+  if (!navigator.share) throw new Error("no share");
+  try {
+    await navigator.share({ files: [file], title: file.name });
+    return true;
+  } catch (e) {
+    if (e && e.name === "AbortError") return "abort";
+    try {
+      await navigator.share({ files: [file] });
+      return true;
+    } catch (e2) {
+      if (e2 && e2.name === "AbortError") return "abort";
+      throw e2 || e;
+    }
   }
-  return Promise.reject(new Error("cannot share files"));
+}
+
+async function sharePreparedFile() {
+  const files = makeShareFiles();
+  if (!files.length) throw new Error("File not ready");
+  let lastErr = null;
+  for (const file of files) {
+    try {
+      const res = await tryShareFile(file);
+      if (res === "abort") return "abort";
+      if (res) return true;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("share failed");
+}
+
+function openShareSheet() {
+  if (!state.workbook) {
+    toast("Import XL first");
+    return;
+  }
+  if (!state.cachedBuf) cacheWorkbook();
+  const hint = $("shareHint");
+  const installHint = $("installHint");
+  if (!navigator.share) {
+    hint.textContent = "This browser has no share sheet. On PC use Chrome or Edge. The file can still be saved, then sent from WhatsApp Desktop.";
+  } else if (isIOS()) {
+    hint.textContent = "On iPhone / iPad tap Allow. Choose WhatsApp in the iOS share sheet. If WhatsApp is missing, install Minibar XL to the Home Screen first (Share → Add to Home Screen).";
+  } else {
+    hint.textContent = "Tap Allow to open the phone share sheet, then choose WhatsApp. The Excel file goes attached — you should not need to download it first.";
+  }
+  installHint.textContent = isStandalone()
+    ? "App is already installed on this device."
+    : (isIOS()
+      ? "iPhone: Safari → Share → Add to Home Screen."
+      : "Android / PC: tap Install app, or Chrome menu → Add to Home screen / Install.");
+  $("shareSheet").classList.add("open");
+}
+
+function closeShareSheet() {
+  $("shareSheet").classList.remove("open");
+}
+
+async function allowAndShare() {
+  if (!state.cachedBuf) {
+    $("loader").classList.remove("hidden");
+    await cacheWorkbook();
+    $("loader").classList.add("hidden");
+  }
+  try {
+    const ok = await sharePreparedFile();
+    if (ok === "abort") return;
+    closeShareSheet();
+    toast("Pick WhatsApp — file attached");
+  } catch (e) {
+    console.error(e);
+    if (!navigator.share) {
+      toast("Use Chrome or Edge to share the file");
+      return;
+    }
+    toast("Share sheet blocked in this view. Open in Chrome / Safari, or install the app.");
+  }
+}
+
+async function installApp() {
+  if (state.installEvent) {
+    state.installEvent.prompt();
+    const choice = await state.installEvent.userChoice;
+    if (choice && choice.outcome === "accepted") toast("App installed");
+    state.installEvent = null;
+    return;
+  }
+  if (isIOS()) {
+    toast("Safari → Share → Add to Home Screen");
+    return;
+  }
+  toast("Chrome menu → Add to Home screen / Install app");
+}
+
+function platform() {
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+  if (/Android/i.test(ua)) return "android";
+  return "pc";
+}
+
+function canShareFiles(file) {
+  try {
+    return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+  } catch (e) {
+    return false;
+  }
+}
+
+function readyShareFiles() {
+  const buf = state.cachedBuf;
+  if (!buf) return [];
+  const base = (state.fileName || "Minibar.xlsx").replace(/\.xlsx$/i, "");
+  const xlsx = new File([buf], base + ".xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const xls = new File([buf], base + ".xlsx", { type: "application/vnd.ms-excel" });
+  const zip = new File([zipOneFile(base + ".xlsx", buf)], base + ".zip", { type: "application/zip" });
+  return [xlsx, xls, zip];
+}
+
+function openShareModal() {
+  const p = platform();
+  const hint = {
+    android: "Tap Allow. On the next sheet choose WhatsApp — the workbook stays attached.",
+    ios: "Tap Allow. On iPhone pick WhatsApp or Save to Files. Use Safari or the Home Screen icon.",
+    pc: "Tap Allow. Chrome / Edge can send the file to an app. You can also use Save XL.",
+  }[p];
+  $("shareHint").textContent = hint;
+  $("shareStatus").textContent = state.cachedBuf ? "Workbook is ready to attach." : "Preparing workbook…";
+  $("shareModal").classList.add("open");
+  if (!state.cachedBuf) cacheWorkbook().then(() => {
+    if ($("shareStatus")) $("shareStatus").textContent = "Workbook is ready to attach.";
+  });
+}
+
+function closeShareModal() {
+  $("shareModal").classList.remove("open");
 }
 
 function shareWhatsApp() {
@@ -602,27 +767,46 @@ function shareWhatsApp() {
     toast("Import XL first");
     return;
   }
-  const buf = state.cachedBuf;
-  const base = (state.fileName || "Minibar.xlsx").replace(/\.xlsx$/i, "");
-  if (!buf) {
-    toast("Preparing file… tap WhatsApp again");
+  if (!state.cachedBuf) {
+    openShareModal();
+    cacheWorkbook();
+    toast("Preparing file — tap Allow and share");
+    return;
+  }
+  openShareModal();
+}
+
+function allowAndShare() {
+  const files = readyShareFiles();
+  if (!files.length) {
+    $("shareStatus").textContent = "Still preparing. Wait 1 second and tap Allow again.";
     cacheWorkbook();
     return;
   }
-  const xlsx = new File([buf], base + ".xlsx", {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const excel = new File([buf], base + ".xlsx", { type: "application/vnd.ms-excel" });
-  const zipName = base + ".zip";
-  const zip = new File([zipOneFile(base + ".xlsx", buf)], zipName, { type: "application/zip" });
-
-  shareFilesNow([xlsx, excel, zip]).then(() => {
-    toast("Pick WhatsApp — file attached");
-  }).catch((e) => {
-    if (e && e.name === "AbortError") return;
-    console.error(e);
-    toast("This browser blocked file share. Install the app to Home Screen and try again.");
-  });
+  $("shareStatus").textContent = "Opening share sheet…";
+  const order = platform() === "ios" ? [files[2], files[0], files[1]] : [files[0], files[1], files[2]];
+  const tryOne = (i) => {
+    if (i >= order.length) {
+      $("shareStatus").textContent = "This browser cannot attach Excel. Open in Chrome (Android) or Safari (iPhone), or use Save XL.";
+      toast("Share sheet blocked on this browser");
+      return;
+    }
+    const file = order[i];
+    if (navigator.canShare && !canShareFiles(file)) return tryOne(i + 1);
+    if (!navigator.share) return tryOne(i + 1);
+    navigator.share({ files: [file], title: file.name }).then(() => {
+      localStorage.setItem("minibar-xl-share-ok", "1");
+      closeShareModal();
+      toast("Pick WhatsApp — file attached");
+    }).catch((e) => {
+      if (e && e.name === "AbortError") {
+        closeShareModal();
+        return;
+      }
+      tryOne(i + 1);
+    });
+  };
+  tryOne(0);
 }
 
 function openTextModal() {
@@ -670,6 +854,10 @@ $("closeTextBtn") && ($("closeTextBtn").onclick = closeTextModal);
 $("applyTextBtn") && ($("applyTextBtn").onclick = applyPastedText);
 $("textModal") && $("textModal").addEventListener("click", (e) => { if (e.target.id === "textModal") closeTextModal(); });
 $("waBtn") && ($("waBtn").onclick = shareWhatsApp);
+$("allowShareBtn") && ($("allowShareBtn").onclick = allowAndShare);
+$("installAppBtn") && ($("installAppBtn").onclick = installApp);
+$("closeShareBtn") && ($("closeShareBtn").onclick = closeShareSheet);
+$("shareSheet") && $("shareSheet").addEventListener("click", (e) => { if (e.target.id === "shareSheet") closeShareSheet(); });
 $("waEntryBtn") && ($("waEntryBtn").onclick = shareWhatsApp);
 $("finishBtn").onclick = saveSameFile;
 $("cleanBtn").onclick = cleanZone;

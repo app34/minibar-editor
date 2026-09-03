@@ -184,13 +184,58 @@ function roomUsedCount(room) {
   return n;
 }
 
+const MONTH_INDEX = {
+  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+  apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+  aug: 7, august: 7, sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+};
+
+function parseSheetDate(name) {
+  const m = String(name).match(/^(\d+)\s*([A-Za-z]+)?/);
+  if (!m) return null;
+  const monthName = (m[2] || "").toLowerCase();
+  return {
+    day: Number(m[1]),
+    month: MONTH_INDEX[monthName],
+    name,
+  };
+}
+
+function fileMonthYear() {
+  const fromName = String(state.fileName || "").match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+  if (fromName) return { month: MONTH_INDEX[fromName[1].toLowerCase()], year: Number(fromName[2]) };
+  return null;
+}
+
 function pickDefaultSheet(names) {
-  const today = new Date().getDate();
-  const rows = names.map((n) => ({ n, d: sheetDayNumber(n) })).filter((x) => x.d != null);
-  const exact = rows.find((x) => x.d === today);
-  if (exact) return exact.n;
-  rows.sort((a, b) => Math.abs(a.d - today) - Math.abs(b.d - today) || b.d - a.d);
-  return (rows[0] && rows[0].n) || names[names.length - 1] || names[0];
+  const now = new Date();
+  const todayD = now.getDate();
+  const todayM = now.getMonth();
+  const todayY = now.getFullYear();
+  const rows = names.map(parseSheetDate).filter((x) => x && x.day);
+  if (!rows.length) return names[names.length - 1] || names[0];
+
+  const fileMeta = fileMonthYear();
+  const months = rows.map((r) => r.month).filter((m) => m != null);
+  const fileMonth = fileMeta ? fileMeta.month : months.sort((a, b) =>
+    months.filter((x) => x === a).length - months.filter((x) => x === b).length
+  ).pop();
+  const fileYear = fileMeta ? fileMeta.year : todayY;
+
+  const sameMonth = fileMonth === todayM && fileYear === todayY;
+  if (sameMonth) {
+    const exact = rows.find((r) => r.day === todayD);
+    if (exact) return exact.name;
+    const maxDay = Math.max(...rows.map((r) => r.day));
+    if (todayD > maxDay) return rows.sort((a, b) => b.day - a.day)[0].name;
+    rows.sort((a, b) => Math.abs(a.day - todayD) - Math.abs(b.day - todayD) || b.day - a.day);
+    return rows[0].name;
+  }
+
+  const filePast = fileYear < todayY || (fileYear === todayY && fileMonth < todayM);
+  const ordered = rows.slice().sort((a, b) => a.day - b.day);
+  return filePast ? ordered[ordered.length - 1].name : ordered[0].name;
 }
 
 function renderDaySelect() {
@@ -680,6 +725,24 @@ function closeShareSheet() {
   $("shareSheet").classList.remove("open");
 }
 
+
+async function requestAppPermissions() {
+  const out = [];
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const ok = await navigator.storage.persist();
+      out.push(ok ? "storage: allowed" : "storage: default");
+    }
+  } catch (e) {}
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const q = await navigator.permissions.query({ name: "persistent-storage" });
+      out.push("persistent-storage=" + q.state);
+    }
+  } catch (e) {}
+  return out;
+}
+
 async function allowAndShare() {
   if (!state.cachedBuf) {
     $("loader").classList.remove("hidden");
@@ -697,7 +760,7 @@ async function allowAndShare() {
       toast("Use Chrome or Edge to share the file");
       return;
     }
-    toast("Share sheet blocked in this view. Open in Chrome / Safari, or install the app.");
+    fallbackDownloadAndWhatsApp();
   }
 }
 
@@ -762,51 +825,78 @@ function closeShareModal() {
   $("shareModal").classList.remove("open");
 }
 
-function shareWhatsApp() {
-  if (!state.workbook) {
+
+function fallbackDownloadAndWhatsApp() {
+  const files = makeShareFiles();
+  const file = (files && files[0]) || state.cachedFile;
+  if (!file) {
     toast("Import XL first");
     return;
   }
-  if (!state.cachedBuf) {
-    openShareModal();
-    cacheWorkbook();
-    toast("Preparing file — tap Allow and share");
-    return;
-  }
-  openShareModal();
+  downloadBlob(file);
+  const day = state.daySheet ? state.daySheet.name.replace(/\s+/g, " ") : "";
+  const msg = "Minibar XL file downloaded: " + file.name + (day ? " (" + day + ")" : "") + ". Attach that Excel from Downloads and send.";
+  setTimeout(() => {
+    window.location.href = "https://wa.me/?text=" + encodeURIComponent(msg);
+  }, 400);
+  closeShareSheet();
+  toast("XL saved to Downloads — WhatsApp opening. Attach the file.");
 }
 
-function allowAndShare() {
-  const files = readyShareFiles();
-  if (!files.length) {
-    $("shareStatus").textContent = "Still preparing. Wait 1 second and tap Allow again.";
-    cacheWorkbook();
+function shareWhatsApp() {
+  openShareSheet();
+}
+
+
+async function requestAppPermissions() {
+  const out = [];
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const ok = await navigator.storage.persist();
+      out.push(ok ? "storage: allowed" : "storage: default");
+    }
+  } catch (e) {}
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const q = await navigator.permissions.query({ name: "persistent-storage" });
+      out.push("persistent-storage=" + q.state);
+    }
+  } catch (e) {}
+  return out;
+}
+
+async function allowAndShare() {
+  await requestAppPermissions();
+  if (state.installEvent && !isStandalone()) {
+    try { state.installEvent.prompt(); } catch (e) {}
+  }
+  if (!navigator.share) {
+    toast("Use Chrome or Edge, or tap Save XL");
     return;
   }
-  $("shareStatus").textContent = "Opening share sheet…";
-  const order = platform() === "ios" ? [files[2], files[0], files[1]] : [files[0], files[1], files[2]];
-  const tryOne = (i) => {
-    if (i >= order.length) {
-      $("shareStatus").textContent = "This browser cannot attach Excel. Open in Chrome (Android) or Safari (iPhone), or use Save XL.";
-      toast("Share sheet blocked on this browser");
-      return;
-    }
-    const file = order[i];
-    if (navigator.canShare && !canShareFiles(file)) return tryOne(i + 1);
-    if (!navigator.share) return tryOne(i + 1);
-    navigator.share({ files: [file], title: file.name }).then(() => {
-      localStorage.setItem("minibar-xl-share-ok", "1");
-      closeShareModal();
+  if (!state.cachedBuf) {
+    toast("Preparing file…");
+    await cacheWorkbook();
+  }
+  const files = makeShareFiles();
+  if (!files.length) {
+    toast("File not ready — tap Allow again");
+    return;
+  }
+  let lastErr = null;
+  for (const file of files) {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      closeShareSheet();
       toast("Pick WhatsApp — file attached");
-    }).catch((e) => {
-      if (e && e.name === "AbortError") {
-        closeShareModal();
-        return;
-      }
-      tryOne(i + 1);
-    });
-  };
-  tryOne(0);
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      lastErr = e;
+    }
+  }
+  console.error(lastErr);
+  fallbackDownloadAndWhatsApp();
 }
 
 function openTextModal() {

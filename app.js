@@ -1,6 +1,124 @@
 
 const $ = (id) => document.getElementById(id);
 
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const HISTORY_LIMIT = 12;
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("minibar-xl", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
+      if (!db.objectStoreNames.contains("history")) db.createObjectStore("history", { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function kvSet(key, value) {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("kv", "readwrite");
+    tx.objectStore("kv").put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function kvGet(key) {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("kv", "readonly");
+    const req = tx.objectStore("kv").get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function historyPut(row) {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readwrite");
+    tx.objectStore("history").put(row);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function historyAll() {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readonly");
+    const req = tx.objectStore("history").getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function historyDel(id) {
+  return openDb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readwrite");
+    tx.objectStore("history").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function downloadFileName() {
+  const custom = (state.downloadName || "").trim();
+  if (custom) return custom.endsWith(".xlsx") ? custom : custom + ".xlsx";
+  return state.fileName || "Minibar.xlsx";
+}
+
+function markReady() {
+  $("fileStatus").textContent = state.fileName + " · kept on this device";
+  $("saveBtn").disabled = false;
+  $("finishBtn").disabled = false;
+  if ($("waBtn")) $("waBtn").disabled = false;
+  if ($("importTextBtn")) $("importTextBtn").disabled = false;
+  if ($("tableBtn")) $("tableBtn").disabled = false;
+}
+
+async function persistCurrent(alsoHistory, note) {
+  if (!state.workbook) return null;
+  refreshDayTotals();
+  const buf = await state.workbook.xlsx.writeBuffer();
+  state.cachedBuf = buf;
+  const name = downloadFileName();
+  state.cachedFile = new File([buf], name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  state.cachedOctet = new File([buf], name, { type: "application/octet-stream" });
+  await kvSet("current", { fileName: state.fileName, downloadName: state.downloadName || "", buf, savedAt: Date.now() });
+  await kvSet("settings", { downloadName: state.downloadName || "" });
+  if (alsoHistory) {
+    const row = { id: Date.now(), fileName: name, note: note || "snapshot", buf, savedAt: Date.now() };
+    await historyPut(row);
+    const all = (await historyAll()).sort((a, b) => b.id - a.id);
+    for (const extra of all.slice(HISTORY_LIMIT)) await historyDel(extra.id);
+  }
+  return buf;
+}
+
+function schedulePersist() {
+  clearTimeout(schedulePersist._t);
+  schedulePersist._t = setTimeout(() => persistCurrent(false).catch(console.error), 700);
+}
+
+async function loadPersistedWorkbook() {
+  const settings = await kvGet("settings");
+  if (settings && settings.downloadName) state.downloadName = settings.downloadName;
+  const cur = await kvGet("current");
+  if (!cur || !cur.buf) return false;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(cur.buf);
+  state.workbook = wb;
+  state.fileName = cur.fileName || state.fileName;
+  state.cachedBuf = cur.buf;
+  markReady();
+  renderDaySelect();
+  toast("Loaded saved workbook");
+  return true;
+}
+
+
+
 const state = {
   workbook: null,
   fileName: "Minibar Consumption August 2026.xlsx",
@@ -12,6 +130,7 @@ const state = {
   selectedRoom: null,
   sheetMode: false,
   usedOnly: false,
+  downloadName: "",
 };
 
 function toast(msg) {
@@ -326,6 +445,7 @@ function renderItems() {
       setValueKeepStyle(state.daySheet, item.row, state.selectedRoom.col, v || null);
       state.dirty = true;
       refreshDayTotals();
+      schedulePersist();
     };
     card.querySelector('[data-act="-"]').onclick = () => write((Number(val.textContent) || 0) - 1);
     card.querySelector('[data-act="+"]').onclick = () => write((Number(val.textContent) || 0) + 1);
@@ -349,9 +469,10 @@ async function openFile(file) {
     $("finishBtn").disabled = false;
     if ($("waBtn")) $("waBtn").disabled = false;
     if ($("importTextBtn")) $("importTextBtn").disabled = false;
+  if ($("tableBtn")) $("tableBtn").disabled = false;
     renderDaySelect();
-    toast("Workbook loaded");
-    cacheWorkbook();
+    toast("Workbook saved on this device");
+    persistCurrent(true, "imported").then(markReady);
   } catch (e) {
     console.error(e);
     toast("Could not open file");
@@ -364,15 +485,15 @@ async function saveSameFile() {
   if (!state.workbook) return;
   $("loader").classList.remove("hidden");
   try {
-    refreshDayTotals();
-    const buf = await state.workbook.xlsx.writeBuffer();
+    await persistCurrent(true, "downloaded");
+    const buf = state.cachedBuf || await state.workbook.xlsx.writeBuffer();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    a.download = state.fileName;
+    a.download = downloadFileName();
     a.click();
     URL.revokeObjectURL(a.href);
     state.dirty = false;
-    toast("Saved " + state.fileName);
+    toast("Saved " + downloadFileName());
   } finally {
     $("loader").classList.add("hidden");
   }
@@ -388,6 +509,7 @@ function cleanZone() {
   state.dirty = true;
   refreshDayTotals();
   renderGrid();
+  schedulePersist();
   toast("Zone cleared");
 }
 
@@ -557,15 +679,8 @@ function shortName(name) {
 }
 
 async function cacheWorkbook() {
-  if (!state.workbook) return null;
   try {
-    refreshDayTotals();
-    const buf = await state.workbook.xlsx.writeBuffer();
-    state.cachedBuf = buf;
-    state.cachedFile = new File([buf], state.fileName, {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    state.cachedOctet = new File([buf], state.fileName, { type: "application/octet-stream" });
+    await persistCurrent(false);
     return state.cachedFile;
   } catch (e) {
     console.error(e);
@@ -844,7 +959,20 @@ function fallbackDownloadAndWhatsApp() {
 }
 
 function shareWhatsApp() {
-  openShareSheet();
+  if (!state.workbook) {
+    toast("Import XL first");
+    return;
+  }
+  if (platform() === "pc") {
+    openShareSheet();
+    return;
+  }
+  if (!state.cachedBuf) {
+    cacheWorkbook().then(() => fallbackDownloadAndWhatsApp());
+    toast("Saving XL…");
+    return;
+  }
+  fallbackDownloadAndWhatsApp();
 }
 
 
@@ -919,12 +1047,268 @@ function applyPastedText() {
       (res.missed ? " · " + res.missed + " unmatched" : "") +
       (res.log.length ? "\n" + res.log.join("\n") : "");
     toast(res.filled + " items written to " + res.day);
+    schedulePersist();
   } catch (e) {
     $("importLog").textContent = String(e.message || e);
     toast(String(e.message || e));
   }
 }
 
+
+
+function daysInMonth(year, monthIdx) {
+  return new Date(year, monthIdx + 1, 0).getDate();
+}
+
+function defaultNameFor(monthIdx, year) {
+  return "Minibar Consumption " + MONTH_NAMES[monthIdx] + " " + year + ".xlsx";
+}
+
+function rewriteMonthFormulas(ws, newMonth) {
+  if (!ws) return;
+  ws.eachRow({ includeEmpty: true }, (row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      const v = cell.value;
+      if (v && typeof v === "object" && v.formula) {
+        cell.value = {
+          formula: String(v.formula).replace(/'\d+\s+[A-Za-z]+'/g, (tok) => {
+            const d = String(tok).match(/(\d+)/);
+            return d ? "'" + d[1] + " " + newMonth + "'" : tok;
+          }),
+          result: v.result,
+        };
+      }
+    });
+  });
+}
+
+function clearRoomQtys(ws) {
+  const rooms = [];
+  ws.getRow(2).eachCell({ includeEmpty: false }, (cell, col) => {
+    if (typeof cell.value === "number" || /^\d+$/.test(String(cell.value))) rooms.push(col);
+  });
+  ws.eachRow({ includeEmpty: false }, (row, r) => {
+    if (r < 3) return;
+    rooms.forEach((col) => setValueKeepStyle(ws, r, col, null));
+  });
+}
+
+function copySheet(wb, src, newName) {
+  const dest = wb.addWorksheet(newName);
+  src.eachRow({ includeEmpty: true }, (row, rn) => {
+    const r = dest.getRow(rn);
+    row.eachCell({ includeEmpty: true }, (cell, cn) => {
+      const c = r.getCell(cn);
+      c.value = cell.value;
+      try { if (cell.style) c.style = JSON.parse(JSON.stringify(cell.style)); } catch (e) {}
+    });
+    if (row.height) r.height = row.height;
+  });
+  (src.columns || []).forEach((col, i) => {
+    if (col && col.width) dest.getColumn(i + 1).width = col.width;
+  });
+  return dest;
+}
+
+async function createMonthWorkbook(monthIdx, year) {
+  if (!state.workbook) throw new Error("Import a workbook first");
+  await persistCurrent(true, "before " + MONTH_NAMES[monthIdx] + " " + year);
+  const days = daysInMonth(year, monthIdx);
+  const monthName = MONTH_NAMES[monthIdx];
+  const dailies = dailySheets();
+  if (!dailies.length) throw new Error("No daily sheet to copy");
+  const template = dailies[0];
+  const created = [];
+  for (let d = 1; d <= days; d++) {
+    const name = d + " " + monthName;
+    const ws = copySheet(state.workbook, template, name);
+    clearRoomQtys(ws);
+    created.push(name);
+  }
+  dailies.forEach((ws) => {
+    if (created.indexOf(ws.name) === -1) {
+      try { state.workbook.removeWorksheet(ws.id); } catch (e) {}
+    }
+  });
+  rewriteMonthFormulas(findSheet("Summary"), monthName);
+  const summary = findSheet("Summary");
+  if (summary) {
+    summary.getRow(2).eachCell({ includeEmpty: false }, (cell, col) => {
+      if (typeof cell.value === "number" && cell.value > days) return;
+    });
+  }
+  state.fileName = defaultNameFor(monthIdx, year);
+  state.downloadName = state.fileName;
+  state.dirty = true;
+  await persistCurrent(true, "created " + monthName);
+  markReady();
+  renderDaySelect();
+}
+
+function fillMonthYearInputs() {
+  const sel = $("newMonthSelect");
+  if (!sel) return;
+  sel.innerHTML = MONTH_NAMES.map((n, i) => "<option value=\"" + i + "\">" + n + "</option>").join("");
+  const now = new Date();
+  const meta = fileMonthYear();
+  let m = now.getMonth();
+  let y = now.getFullYear();
+  if (meta) {
+    m = meta.month + 1;
+    y = meta.year;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  sel.value = String(m);
+  $("newYearInput").value = y;
+  $("downloadNameInput").value = state.downloadName || state.fileName || defaultNameFor(m, y);
+}
+
+async function renderHistory() {
+  const box = $("historyList");
+  if (!box) return;
+  const rows = (await historyAll()).sort((a, b) => b.id - a.id);
+  if (!rows.length) {
+    box.innerHTML = "<p class=\"file-hint\">No snapshots yet. Save XL or create a month to keep history.</p>";
+    return;
+  }
+  box.innerHTML = "";
+  rows.forEach((row) => {
+    const when = new Date(row.savedAt || row.id).toLocaleString();
+    const el = document.createElement("div");
+    el.className = "history-row";
+    el.innerHTML = "<span><b>" + escapeHtml(row.fileName || "workbook") + "</b>" + escapeHtml(row.note || "") + " · " + when + "</span>";
+    const rest = document.createElement("button");
+    rest.className = "btn-cool";
+    rest.textContent = "Restore";
+    rest.onclick = () => restoreHistory(row.id);
+    const dl = document.createElement("button");
+    dl.className = "btn-cool btn-success";
+    dl.textContent = "Get XL";
+    dl.onclick = () => {
+      const f = new File([row.buf], row.fileName || "Minibar.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      downloadBlob(f);
+    };
+    el.appendChild(rest);
+    el.appendChild(dl);
+    box.appendChild(el);
+  });
+}
+
+async function restoreHistory(id) {
+  const rows = await historyAll();
+  const row = rows.find((r) => r.id === id);
+  if (!row || !row.buf) return;
+  if (state.workbook) await persistCurrent(true, "before restore");
+  const file = new File([row.buf], row.fileName || "Minibar.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  await openFile(file);
+  toast("Restored " + file.name);
+}
+
+function openSettings() {
+  fillMonthYearInputs();
+  renderHistory();
+  $("settingsModal").classList.add("open");
+}
+
+function closeSettings() {
+  $("settingsModal").classList.remove("open");
+}
+
+async function saveSettings() {
+  state.downloadName = ($("downloadNameInput").value || "").trim();
+  await kvSet("settings", { downloadName: state.downloadName });
+  if (state.workbook) await persistCurrent(false);
+  toast("Download name saved");
+}
+
+async function onCreateMonth() {
+  if (!state.workbook) {
+    toast("Import XL once first");
+    return;
+  }
+  const monthIdx = Number($("newMonthSelect").value);
+  const year = Number($("newYearInput").value);
+  if (!confirm("Create " + MONTH_NAMES[monthIdx] + " " + year + "? Current month is stored in history.")) return;
+  $("loader").classList.remove("hidden");
+  try {
+    await createMonthWorkbook(monthIdx, year);
+    $("downloadNameInput").value = state.downloadName;
+    await renderHistory();
+    toast("Created " + state.fileName);
+  } catch (e) {
+    console.error(e);
+    toast(String(e.message || e));
+  } finally {
+    $("loader").classList.add("hidden");
+  }
+}
+
+
+function tablePages() {
+  const groups = {};
+  state.rooms.forEach((r) => {
+    const block = Math.floor(Number(r.room) / 100) * 100;
+    (groups[block] || (groups[block] = [])).push(r);
+  });
+  const pages = [];
+  const push = (title, blocks) => {
+    const rooms = [];
+    blocks.forEach((b) => (groups[b] || []).forEach((r) => rooms.push(r)));
+    if (rooms.length) pages.push({ title: title + " (" + rooms.length + ")", rooms });
+  };
+  push("Water 400", [400]);
+  push("Water 500-600", [500, 600]);
+  push("Beach 100", [100]);
+  push("Beach 200-300", [200, 300]);
+  Object.keys(groups).map(Number).sort((a, b) => a - b).forEach((b) => {
+    if ([100, 200, 300, 400, 500, 600].indexOf(b) === -1) push("Villas " + b, [b]);
+  });
+  return pages;
+}
+
+function renderTablePage(idx) {
+  const pages = tablePages();
+  if (!pages.length) return;
+  if (idx < 0) idx = 0;
+  if (idx > pages.length - 1) idx = pages.length - 1;
+  state.tablePage = idx;
+  const page = pages[idx];
+  const day = state.daySheet ? state.daySheet.name.replace(/\s+/g, " ") : "";
+  $("tableTitle").textContent = page.title + " · " + day;
+  if ($("tablePageLabel")) $("tablePageLabel").textContent = "Page " + (idx + 1) + " of " + pages.length;
+  if ($("tablePrevBtn")) $("tablePrevBtn").disabled = idx === 0;
+  if ($("tableNextBtn")) $("tableNextBtn").disabled = idx === pages.length - 1;
+  const wrap = $("tableWrap");
+  if (!page) { wrap.innerHTML = ""; return; }
+  let html = "<table class=\"sheet-table\"><thead><tr><th class=\"item-col\">Item</th>";
+  page.rooms.forEach((r) => { html += "<th>" + r.room + "</th>"; });
+  html += "</tr></thead><tbody>";
+  state.items.forEach((item) => {
+    html += "<tr><td class=\"item-col\">" + escapeHtml(shortName(item.name)) + "</td>";
+    page.rooms.forEach((r) => {
+      const q = Number(cellVal(state.daySheet, item.row, r.col)) || 0;
+      html += q ? "<td class=\"has\">" + q + "</td>" : "<td></td>";
+    });
+    html += "</tr>";
+  });
+  html += "</tbody></table>";
+  wrap.innerHTML = html;
+}
+
+function openTableView() {
+  if (!state.workbook || !state.daySheet) {
+    toast("Load a workbook first");
+    return;
+  }
+  $("tableModal").classList.add("open");
+  const pages = tablePages();
+  const prefer = state.zone === "Water" ? 0 : Math.min(2, pages.length - 1);
+  renderTablePage(prefer < 0 ? 0 : prefer);
+}
+
+function closeTableView() {
+  $("tableModal").classList.remove("open");
+}
 
 function setZone(zone) {
   state.zone = zone;
@@ -933,6 +1317,17 @@ function setZone(zone) {
   renderGrid();
 }
 
+
+$("tableBtn") && ($("tableBtn").onclick = openTableView);
+$("tablePrevBtn") && ($("tablePrevBtn").onclick = () => renderTablePage((state.tablePage || 0) - 1));
+$("tableNextBtn") && ($("tableNextBtn").onclick = () => renderTablePage((state.tablePage || 0) + 1));
+$("closeTableBtn") && ($("closeTableBtn").onclick = closeTableView);
+$("tableModal") && $("tableModal").addEventListener("click", (e) => { if (e.target.id === "tableModal") closeTableView(); });
+$("settingsBtn") && ($("settingsBtn").onclick = openSettings);
+$("closeSettingsBtn") && ($("closeSettingsBtn").onclick = closeSettings);
+$("settingsModal") && $("settingsModal").addEventListener("click", (e) => { if (e.target.id === "settingsModal") closeSettings(); });
+$("saveSettingsBtn") && ($("saveSettingsBtn").onclick = saveSettings);
+$("createMonthBtn") && ($("createMonthBtn").onclick = onCreateMonth);
 $("btnBeach").onclick = () => setZone("Beach");
 $("btnWater").onclick = () => setZone("Water");
 $("daySelect").onchange = onDayChange;
@@ -952,7 +1347,7 @@ $("waEntryBtn") && ($("waEntryBtn").onclick = shareWhatsApp);
 $("finishBtn").onclick = saveSameFile;
 $("cleanBtn").onclick = cleanZone;
 $("closeModalBtn").onclick = closeRoom;
-$("saveEntryBtn").onclick = () => { closeRoom(); toast("Local entry kept in file"); };
+$("saveEntryBtn").onclick = () => { closeRoom(); persistCurrent(false); toast("Saved on this device"); };
 $("usedOnlyBtn") && ($("usedOnlyBtn").onclick = () => {
   state.usedOnly = !state.usedOnly;
   $("usedOnlyBtn").classList.toggle("active", state.usedOnly);
@@ -987,3 +1382,5 @@ if (window.visualViewport) {
 if (window.parent && window.parent !== window) {
   document.body.classList.add("embedded");
 }
+
+loadPersistedWorkbook().catch((e) => console.error(e));

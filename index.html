@@ -23,6 +23,7 @@
         <button class="toggle-btn" id="btnWater" data-zone="Water">Water</button>
       </div>
       <select id="daySelect" class="day-select" disabled title="Service date"></select>
+      <button class="btn-icon-setting" id="settingsBtn" type="button" title="Settings">⚙</button>
     </div>
   </header>
 
@@ -39,7 +40,10 @@
         <button class="btn-cool btn-success" id="saveBtn" type="button" disabled>Save XL</button>
         <button class="btn-cool btn-success" id="waBtn" type="button" disabled>WhatsApp</button>
       </div>
-      <button class="btn-cool btn-primary" id="finishBtn" type="button" disabled>Finish Day</button>
+      <div class="save-row" style="margin-bottom:8px">
+        <button class="btn-cool btn-primary" id="finishBtn" type="button" disabled>Finish Day</button>
+        <button class="btn-cool" id="tableBtn" type="button" disabled>Table view</button>
+      </div>
       <p class="file-hint" id="fileStatus">Import the month workbook to begin</p>
       <h2 class="section-title" id="zoneTitle">BEACH ZONE (0)</h2>
       <div class="villa-grid" id="villaGrid"></div>
@@ -103,6 +107,43 @@
       <button class="btn-cool" id="installAppBtn" type="button">Install app on this device</button>
       <button class="btn-cool" id="closeShareBtn" type="button">Not now</button>
       <p class="perm-note" id="installHint"></p>
+    </div>
+  </div>
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card sheet text-card">
+      <header class="modal-header">
+        <div class="modal-title">Settings</div>
+        <button class="btn-action-icon" id="closeSettingsBtn" type="button">X</button>
+      </header>
+      <div class="text-import-body">
+        <label class="set-label">Default download file name</label>
+        <input id="downloadNameInput" class="set-input" type="text" placeholder="Minibar Consumption September 2026.xlsx" />
+        <button class="save-entry" id="saveSettingsBtn" type="button">Save name</button>
+        <label class="set-label">Create next month workbook</label>
+        <p class="file-hint">Keeps rooms, items and colours. Clears daily counts. Current month is saved to history first.</p>
+        <div class="save-row">
+          <select id="newMonthSelect" class="set-input"></select>
+          <input id="newYearInput" class="set-input year-input" type="number" min="2024" max="2100" />
+        </div>
+        <button class="save-entry" id="createMonthBtn" type="button">Create month file</button>
+        <label class="set-label">Download history</label>
+        <p class="file-hint">Restore a snapshot if the live file is wrong.</p>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="tableModal">
+    <div class="modal-card" id="tableCard">
+      <header class="modal-header">
+        <div class="modal-title" id="tableTitle">Table</div>
+        <button class="btn-action-icon" id="closeTableBtn" type="button">X</button>
+      </header>
+      <div class="table-wrap" id="tableWrap"></div>
+      <footer class="modal-footer table-nav">
+        <button class="btn-cool" id="tablePrevBtn" type="button">Prev page</button>
+        <div class="day-total" id="tablePageLabel">Page 1 of 4</div>
+        <button class="btn-cool btn-primary" id="tableNextBtn" type="button">Next page</button>
+      </footer>
     </div>
   </div>
   <div class="toast-container"><div class="toast-msg" id="toast"></div></div>

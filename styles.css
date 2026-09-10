@@ -222,3 +222,37 @@ body.embedded .brand { padding-left: 4px; }
 .share-card { height: auto; max-height: min(72dvh, 560px); }
 .share-steps { margin: 0; padding-left: 18px; color: var(--muted); font-size: .75rem; line-height: 1.45; }
 .share-steps b { color: var(--text); }
+
+.btn-icon-setting {
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: .9rem; flex-shrink: 0;
+}
+.set-label { font-size: .72rem; font-weight: 700; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.set-input {
+  width: 100%; padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text); font-size: .78rem;
+}
+.year-input { max-width: 90px; }
+.history-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+.history-row {
+  display: flex; gap: 6px; align-items: center; justify-content: space-between;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+}
+.history-row span { font-size: .68rem; color: var(--muted); flex: 1; min-width: 0; }
+.history-row b { display: block; color: var(--text); font-size: .74rem; }
+.history-row button { padding: 5px 8px; font-size: .65rem; }
+
+.table-nav { flex-direction: row; align-items: center; }
+.table-nav .day-total { flex: 1; }
+.table-wrap { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.sheet-table { border-collapse: collapse; min-width: 100%; font-size: .62rem; }
+.sheet-table th, .sheet-table td {
+  border: 1px solid var(--border); padding: 3px 4px; text-align: center; white-space: nowrap;
+}
+.sheet-table thead th { position: sticky; top: 0; background: #101b2d; z-index: 2; font-size: .6rem; }
+.sheet-table th.item-col, .sheet-table td.item-col {
+  position: sticky; left: 0; background: #101b2d; text-align: left; z-index: 3; min-width: 92px; max-width: 120px;
+  white-space: normal; line-height: 1.15;
+}
+.sheet-table thead th.item-col { z-index: 4; }
+.sheet-table td.has { background: rgba(34,197,94,.18); color: var(--success); font-weight: 700; }

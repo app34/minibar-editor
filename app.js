@@ -1,5 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
+const APP_VERSION = "1.7.0";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const HISTORY_LIMIT = 12;
@@ -1244,55 +1245,154 @@ async function onCreateMonth() {
 }
 
 
-function tablePages() {
-  const groups = {};
-  state.rooms.forEach((r) => {
-    const block = Math.floor(Number(r.room) / 100) * 100;
-    (groups[block] || (groups[block] = [])).push(r);
-  });
-  const pages = [];
-  const push = (title, blocks) => {
-    const rooms = [];
-    blocks.forEach((b) => (groups[b] || []).forEach((r) => rooms.push(r)));
-    if (rooms.length) pages.push({ title: title + " (" + rooms.length + ")", rooms });
-  };
-  push("Water 400", [400]);
-  push("Water 500-600", [500, 600]);
-  push("Beach 100", [100]);
-  push("Beach 200-300", [200, 300]);
-  Object.keys(groups).map(Number).sort((a, b) => a - b).forEach((b) => {
-    if ([100, 200, 300, 400, 500, 600].indexOf(b) === -1) push("Villas " + b, [b]);
-  });
-  return pages;
+function tableDisplayName(name) {
+  let s = shortName(name).replace(/\s+/g, " ").trim();
+  s = s.replace(/\b(mb|softdrink)\b/ig, "").replace(/\s+/g, " ").trim();
+  return s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
 }
 
-function renderTablePage(idx) {
-  const pages = tablePages();
-  if (!pages.length) return;
-  if (idx < 0) idx = 0;
-  if (idx > pages.length - 1) idx = pages.length - 1;
-  state.tablePage = idx;
-  const page = pages[idx];
+function setTableViewport(allowZoom) {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  meta.setAttribute("content", allowZoom
+    ? "width=device-width, initial-scale=1, maximum-scale=4, user-scalable=yes, viewport-fit=cover"
+    : "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+}
+
+function tableKey(row, col) { return row + ":" + col; }
+
+function refreshTableChrome() {
+  const edit = !!state.tableEdit;
+  if ($("tableEditBtn")) {
+    $("tableEditBtn").classList.toggle("active", edit);
+    $("tableEditBtn").textContent = edit ? "Done" : "Edit";
+  }
+  if ($("tableUndoBtn")) $("tableUndoBtn").disabled = !edit || !(state.tableUndo && state.tableUndo.length);
+  if ($("tableRedoBtn")) $("tableRedoBtn").disabled = !edit || !(state.tableRedo && state.tableRedo.length);
+  if ($("tableWrap")) $("tableWrap").classList.toggle("editing", edit);
+}
+
+function applyTableZoom() {
+  const z = state.tableZoom || 1;
+  const table = document.querySelector("#tableWrap .sheet-table");
+  if (table) table.style.zoom = String(z);
+}
+
+function paintTableCell(row, col, val, edited) {
+  const cell = document.querySelector('#tableWrap td[data-row="' + row + '"][data-col="' + col + '"]');
+  if (!cell) return;
+  cell.textContent = val ? String(val) : "";
+  cell.classList.toggle("has", val > 0);
+  cell.classList.toggle("edited", !!edited);
+}
+
+function writeTableCell(row, col, next, record) {
+  const prev = Number(cellVal(state.daySheet, row, col)) || 0;
+  const val = Math.max(0, parseInt(next, 10) || 0);
+  if (val === prev) {
+    paintTableCell(row, col, val, state.tableEdited && state.tableEdited[tableKey(row, col)]);
+    return;
+  }
+  setValueKeepStyle(state.daySheet, row, col, val || null);
+  state.dirty = true;
+  refreshItemTotal(state.daySheet, row);
+  updateSummaryForDay();
+  if (record) {
+    state.tableUndo.push({ row, col, prev, val });
+    if (state.tableUndo.length > 80) state.tableUndo.shift();
+    state.tableRedo = [];
+  }
+  state.tableEdited[tableKey(row, col)] = true;
+  paintTableCell(row, col, val, true);
+  refreshTableChrome();
+}
+
+function undoTableEdit() {
+  const last = state.tableUndo && state.tableUndo.pop();
+  if (!last) return;
+  writeTableCell(last.row, last.col, last.prev, false);
+  state.tableRedo.push(last);
+  refreshTableChrome();
+}
+
+function redoTableEdit() {
+  const last = state.tableRedo && state.tableRedo.pop();
+  if (!last) return;
+  writeTableCell(last.row, last.col, last.val, false);
+  state.tableUndo.push(last);
+  refreshTableChrome();
+}
+
+function renderTableView() {
   const day = state.daySheet ? state.daySheet.name.replace(/\s+/g, " ") : "";
-  $("tableTitle").textContent = page.title + " · " + day;
-  if ($("tablePageLabel")) $("tablePageLabel").textContent = "Page " + (idx + 1) + " of " + pages.length;
-  if ($("tablePrevBtn")) $("tablePrevBtn").disabled = idx === 0;
-  if ($("tableNextBtn")) $("tableNextBtn").disabled = idx === pages.length - 1;
+  $("tableTitle").textContent = "Consumption · " + day;
+  const rooms = state.rooms.slice().sort((a, b) => Number(a.room) - Number(b.room));
   const wrap = $("tableWrap");
-  if (!page) { wrap.innerHTML = ""; return; }
   let html = "<table class=\"sheet-table\"><thead><tr><th class=\"item-col\">Item</th>";
-  page.rooms.forEach((r) => { html += "<th>" + r.room + "</th>"; });
+  rooms.forEach((r) => {
+    const zone = zoneOf(r.room) === "Water" ? "th-water" : "th-beach";
+    html += "<th class=\"" + zone + "\">" + r.room + "</th>";
+  });
   html += "</tr></thead><tbody>";
   state.items.forEach((item) => {
-    html += "<tr><td class=\"item-col\">" + escapeHtml(shortName(item.name)) + "</td>";
-    page.rooms.forEach((r) => {
+    html += "<tr><td class=\"item-col cat-" + item.cat + "\"><span class=\"item-label\"><i class=\"item-swatch\"></i>" +
+      escapeHtml(tableDisplayName(item.name)) + "</span></td>";
+    rooms.forEach((r) => {
       const q = Number(cellVal(state.daySheet, item.row, r.col)) || 0;
-      html += q ? "<td class=\"has\">" + q + "</td>" : "<td></td>";
+      const edited = state.tableEdited && state.tableEdited[tableKey(item.row, r.col)];
+      html += "<td data-row=\"" + item.row + "\" data-col=\"" + r.col + "\" class=\"" +
+        (q ? "has" : "") + (edited ? " edited" : "") + "\">" + (q ? q : "") + "</td>";
     });
     html += "</tr>";
   });
   html += "</tbody></table>";
   wrap.innerHTML = html;
+  applyTableZoom();
+  refreshTableChrome();
+}
+
+function onTableCellClick(e) {
+  if (!state.tableEdit) return;
+  if (e.target.tagName === "INPUT") return;
+  const td = e.target.closest("td[data-row]");
+  if (!td) return;
+  const row = Number(td.getAttribute("data-row"));
+  const col = Number(td.getAttribute("data-col"));
+  const current = Number(cellVal(state.daySheet, row, col)) || 0;
+  const input = document.createElement("input");
+  input.className = "cell-input";
+  input.type = "number";
+  input.min = "0";
+  input.inputMode = "numeric";
+  input.value = current ? String(current) : "";
+  td.textContent = "";
+  td.appendChild(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    writeTableCell(row, col, input.value, true);
+  };
+  input.addEventListener("blur", commit, { once: true });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") input.blur();
+    if (ev.key === "Escape") {
+      input.value = String(current);
+      input.blur();
+    }
+  });
+}
+
+function toggleTableEdit() {
+  if (state.tableEdit) {
+    state.tableEdit = false;
+    persistCurrent(true, "table edit");
+    toast("Edits saved");
+    refreshTableChrome();
+    return;
+  }
+  state.tableEdit = true;
+  refreshTableChrome();
+  toast("Edit mode — tap a number");
 }
 
 function openTableView() {
@@ -1300,13 +1400,21 @@ function openTableView() {
     toast("Load a workbook first");
     return;
   }
+  state.tableEdit = false;
+  state.tableUndo = [];
+  state.tableRedo = [];
+  state.tableEdited = {};
+  state.tableZoom = state.tableZoom || 1;
+  setTableViewport(true);
   $("tableModal").classList.add("open");
-  const pages = tablePages();
-  const prefer = state.zone === "Water" ? 0 : Math.min(2, pages.length - 1);
-  renderTablePage(prefer < 0 ? 0 : prefer);
+  renderTableView();
 }
 
 function closeTableView() {
+  persistCurrent(true, "table close");
+  state.tableEdit = false;
+  state.tableEdited = {};
+  setTableViewport(false);
   $("tableModal").classList.remove("open");
 }
 
@@ -1319,10 +1427,67 @@ function setZone(zone) {
 
 
 $("tableBtn") && ($("tableBtn").onclick = openTableView);
-$("tablePrevBtn") && ($("tablePrevBtn").onclick = () => renderTablePage((state.tablePage || 0) - 1));
-$("tableNextBtn") && ($("tableNextBtn").onclick = () => renderTablePage((state.tablePage || 0) + 1));
+$("tableEditBtn") && ($("tableEditBtn").onclick = toggleTableEdit);
+$("tableUndoBtn") && ($("tableUndoBtn").onclick = undoTableEdit);
+$("tableRedoBtn") && ($("tableRedoBtn").onclick = redoTableEdit);
+$("tableZoomInBtn") && ($("tableZoomInBtn").onclick = () => {
+  state.tableZoom = Math.min(1.8, (state.tableZoom || 1) + 0.1);
+  applyTableZoom();
+});
+$("tableZoomOutBtn") && ($("tableZoomOutBtn").onclick = () => {
+  state.tableZoom = Math.max(0.7, (state.tableZoom || 1) - 0.1);
+  applyTableZoom();
+});
+$("tableWrap") && $("tableWrap").addEventListener("click", onTableCellClick);
 $("closeTableBtn") && ($("closeTableBtn").onclick = closeTableView);
 $("tableModal") && $("tableModal").addEventListener("click", (e) => { if (e.target.id === "tableModal") closeTableView(); });
+async function forceLatestVersion() {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (e) {}
+  const url = new URL(location.href);
+  url.searchParams.set("v", Date.now().toString());
+  location.replace(url.toString());
+}
+
+function parseVer(s) {
+  return String(s || "0").split(".").map((n) => parseInt(n, 10) || 0);
+}
+
+function verOlder(a, b) {
+  const x = parseVer(a), y = parseVer(b);
+  for (let i = 0; i < 3; i++) {
+    if ((x[i] || 0) < (y[i] || 0)) return true;
+    if ((x[i] || 0) > (y[i] || 0)) return false;
+  }
+  return false;
+}
+
+async function checkAppVersion() {
+  if ($("appVersionLabel")) $("appVersionLabel").textContent = "This device: v" + APP_VERSION;
+  try {
+    const res = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const info = await res.json();
+    if ($("appVersionLabel")) {
+      $("appVersionLabel").textContent = "This device: v" + APP_VERSION + " · Live: v" + info.version;
+    }
+    const need = info.minVersion || info.version;
+    if (info.version !== APP_VERSION || verOlder(APP_VERSION, need)) {
+      toast("Updating to v" + info.version);
+      setTimeout(forceLatestVersion, 400);
+    }
+  } catch (e) {}
+}
+
+$("forceLatestBtn") && ($("forceLatestBtn").onclick = forceLatestVersion);
 $("settingsBtn") && ($("settingsBtn").onclick = openSettings);
 $("closeSettingsBtn") && ($("closeSettingsBtn").onclick = closeSettings);
 $("settingsModal") && $("settingsModal").addEventListener("click", (e) => { if (e.target.id === "settingsModal") closeSettings(); });
@@ -1384,3 +1549,4 @@ if (window.parent && window.parent !== window) {
 }
 
 loadPersistedWorkbook().catch((e) => console.error(e));
+checkAppVersion();

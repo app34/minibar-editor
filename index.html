@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=1.7.0" />
 </head>
 <body>
   <header class="top-header">
@@ -116,6 +116,9 @@
         <button class="btn-action-icon" id="closeSettingsBtn" type="button">X</button>
       </header>
       <div class="text-import-body">
+        <label class="set-label">App version</label>
+        <p class="file-hint" id="appVersionLabel">Version —</p>
+        <button class="save-entry" id="forceLatestBtn" type="button">Use latest version</button>
         <label class="set-label">Default download file name</label>
         <input id="downloadNameInput" class="set-input" type="text" placeholder="Minibar Consumption September 2026.xlsx" />
         <button class="save-entry" id="saveSettingsBtn" type="button">Save name</button>
@@ -136,24 +139,32 @@
     <div class="modal-card" id="tableCard">
       <header class="modal-header">
         <div class="modal-title" id="tableTitle">Table</div>
-        <button class="btn-action-icon" id="closeTableBtn" type="button">X</button>
+        <div class="header-action-group table-tools">
+          <button class="btn-cool" id="tableZoomOutBtn" type="button">-</button>
+          <button class="btn-cool" id="tableZoomInBtn" type="button">+</button>
+          <button class="view-pill-btn" id="tableEditBtn" type="button">Edit</button>
+          <button class="btn-cool" id="tableUndoBtn" type="button" disabled>Undo</button>
+          <button class="btn-cool" id="tableRedoBtn" type="button" disabled>Redo</button>
+          <button class="btn-action-icon" id="closeTableBtn" type="button">X</button>
+        </div>
       </header>
+      <div class="category-legend table-legend">
+        <span class="legend-item"><i class="legend-swatch food"></i> Food</span>
+        <span class="legend-item"><i class="legend-swatch soft"></i> Soft drinks</span>
+        <span class="legend-item"><i class="legend-swatch alc"></i> Alcohol</span>
+        <span class="legend-item"><i class="legend-swatch snack"></i> Snacks</span>
+      </div>
       <div class="table-wrap" id="tableWrap"></div>
-      <footer class="modal-footer table-nav">
-        <button class="btn-cool" id="tablePrevBtn" type="button">Prev page</button>
-        <div class="day-total" id="tablePageLabel">Page 1 of 4</div>
-        <button class="btn-cool btn-primary" id="tableNextBtn" type="button">Next page</button>
-      </footer>
     </div>
   </div>
   <div class="toast-container"><div class="toast-msg" id="toast"></div></div>
   <div class="loader hidden" id="loader"><span>Working...</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=1.7.0"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js").catch(function () {});
+      navigator.serviceWorker.register("./sw.js?v=1.7.0").catch(function () {});
     }
   </script>
 </body>

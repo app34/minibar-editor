@@ -1348,6 +1348,11 @@ function renderTableView() {
   html += "</tbody></table>";
   wrap.innerHTML = html;
   applyTableZoom();
+  wrap.classList.toggle("pin-names", !!state.tablePinNames);
+  if ($("tablePinBtn")) {
+    $("tablePinBtn").classList.toggle("active", !!state.tablePinNames);
+    $("tablePinBtn").textContent = state.tablePinNames ? "Scroll names" : "Pin names";
+  }
   refreshTableChrome();
 }
 
@@ -1437,6 +1442,12 @@ $("tableZoomInBtn") && ($("tableZoomInBtn").onclick = () => {
 $("tableZoomOutBtn") && ($("tableZoomOutBtn").onclick = () => {
   state.tableZoom = Math.max(0.7, (state.tableZoom || 1) - 0.1);
   applyTableZoom();
+});
+$("tablePinBtn") && ($("tablePinBtn").onclick = () => {
+  state.tablePinNames = !state.tablePinNames;
+  if ($("tableWrap")) $("tableWrap").classList.toggle("pin-names", !!state.tablePinNames);
+  $("tablePinBtn").classList.toggle("active", !!state.tablePinNames);
+  $("tablePinBtn").textContent = state.tablePinNames ? "Scroll names" : "Pin names";
 });
 $("tableWrap") && $("tableWrap").addEventListener("click", onTableCellClick);
 $("closeTableBtn") && ($("closeTableBtn").onclick = closeTableView);

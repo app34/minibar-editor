@@ -12,11 +12,38 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=1.7.0" />
+  <meta name="app-version" content="1.8.0" />
+  <link rel="stylesheet" href="styles.css?v=1.8.0" />
+  <script>
+    window.APP_BUILD = "1.8.0";
+    (function () {
+      if (sessionStorage.getItem("mbxl-forced") === "1.8.0") return;
+      fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (info) {
+        var need = String(info.minVersion || info.version || "");
+        if (need && need !== window.APP_BUILD) {
+          sessionStorage.setItem("mbxl-forced", "1.8.0");
+          var done = Promise.resolve();
+          if (navigator.serviceWorker) {
+            done = navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            });
+          }
+          done.then(function () {
+            if (!window.caches) return;
+            return caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          }).then(function () {
+            location.replace(location.pathname + "?v=" + Date.now());
+          });
+        }
+      }).catch(function () {});
+    })();
+  </script>
 </head>
 <body>
   <header class="top-header">
-    <div class="brand">Minibar XL</div>
+    <div class="brand">Minibar XL <small id="verBadge">v1.8.0</small></div>
     <div class="header-controls">
       <div class="zone-toggle">
         <button class="toggle-btn active" id="btnBeach" data-zone="Beach">Beach</button>
@@ -139,6 +166,7 @@
     <div class="modal-card" id="tableCard">
       <header class="modal-header">
         <div class="modal-title" id="tableTitle">Table</div>
+        <select id="tableDaySelect" class="day-select" title="Service date"></select>
         <div class="header-action-group table-tools">
           <button class="btn-cool" id="tableZoomOutBtn" type="button">-</button>
           <button class="btn-cool" id="tableZoomInBtn" type="button">+</button>
@@ -156,16 +184,22 @@
         <span class="legend-item"><i class="legend-swatch snack"></i> Snacks</span>
       </div>
       <div class="table-wrap" id="tableWrap"></div>
+      <div class="suggest-bar hidden" id="suggestBar">
+        <button class="btn-cool suggest-num" data-qty="1" type="button">1</button>
+        <button class="btn-cool suggest-num" data-qty="2" type="button">2</button>
+        <button class="btn-cool suggest-num" data-qty="3" type="button">3</button>
+        <button class="btn-cool btn-primary" id="tableNextItemBtn" type="button">Next</button>
+      </div>
     </div>
   </div>
   <div class="toast-container"><div class="toast-msg" id="toast"></div></div>
   <div class="loader hidden" id="loader"><span>Working...</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script src="app.js?v=1.7.0"></script>
+  <script src="app.js?v=1.8.0"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=1.7.0").catch(function () {});
+      navigator.serviceWorker.register("./sw.js?v=1.8.0", { updateViaCache: "none" }).catch(function () {});
     }
   </script>
 </body>

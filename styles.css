@@ -173,23 +173,41 @@ button, label { cursor: pointer; }
 
 @media (min-width: 860px) {
   :root { --grid-cols: 10; --item-cols: 3; }
-  .main-container { max-width: 1080px; padding: 4px 8px 24px; }
-  .viewport { padding-top: 14px; }
-  .top-header { padding-left: 18px; padding-right: 18px; }
-  .brand { font-size: 1rem; }
-  .villa-tile { height: 46px; font-size: .85rem; }
-  .modal-overlay { align-items: center; padding: 24px; }
-  .modal-card, .modal-card.sheet, .text-card {
-    width: min(980px, 100%);
-    height: min(820px, calc(var(--app-h) - 48px));
-    max-width: 980px;
+  .main-container { max-width: 1280px; padding: 8px 16px 28px; }
+  .viewport { padding-top: 16px; }
+  .top-header { padding: 10px 24px; min-height: 56px; }
+  .brand { font-size: 1.05rem; }
+  .day-select { max-width: 160px; font-size: .78rem; padding: 6px 8px; }
+  .btn-cool, .save-entry, .toggle-btn { transition: background .15s, border-color .15s, transform .12s; }
+  .btn-cool:hover, .save-entry:hover, .toggle-btn:hover { filter: brightness(1.12); }
+  .villa-tile { height: 48px; font-size: .88rem; }
+  .villa-tile:hover { border-color: var(--primary); }
+  .control-toolbar { gap: 8px; }
+  .modal-overlay { align-items: center; padding: 28px; }
+  .modal-card.sheet, .text-card {
+    width: min(720px, 100%);
+    height: min(780px, calc(var(--app-h) - 56px));
+    max-width: 720px;
     border-radius: 16px;
     margin: 0 auto;
     border: 1px solid var(--border);
     box-shadow: 0 24px 64px rgba(0,0,0,.45);
   }
-  .item-name { font-size: .72rem; }
-  .modal-footer { padding: 10px 14px 14px; }
+  #tableCard.modal-card {
+    width: min(1400px, calc(100% - 32px));
+    max-width: 1400px;
+    height: min(900px, calc(var(--app-h) - 40px));
+    border-radius: 16px;
+    margin: 0 auto;
+    border: 1px solid var(--border);
+    box-shadow: 0 24px 64px rgba(0,0,0,.45);
+  }
+  .sheet-table { font-size: .72rem; }
+  .sheet-table th, .sheet-table td { padding: 6px 8px; }
+  .sheet-table th.item-col, .sheet-table td.item-col { min-width: 260px; }
+  .suggest-bar { justify-content: flex-start; padding: 10px 16px 14px; }
+  .item-name { font-size: .74rem; }
+  .modal-footer { padding: 10px 16px 16px; }
 }
 
 @media (max-width: 380px) {
@@ -254,6 +272,7 @@ body.embedded .brand { padding-left: 4px; }
 }
 .suggest-bar.hidden { display: none; }
 .suggest-num { min-width: 48px; min-height: 40px; font-size: 1rem; font-weight: 700; }
+.btn-next-sm { padding: 6px 8px; font-size: .68rem; min-height: 32px; }
 .sheet-table th.th-total, .sheet-table td.row-total, .sheet-table td.col-total, .sheet-table td.grand-total {
   font-weight: 700; color: var(--primary); background: #0f1a2b;
 }

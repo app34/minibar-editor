@@ -1,6 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = "3.0.0";
+const APP_VERSION = "3.1.0";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const HISTORY_LIMIT = 12;
@@ -1290,8 +1290,10 @@ function refreshTableChrome() {
     $("tableEditBtn").classList.toggle("active", edit);
     $("tableEditBtn").textContent = edit ? "Done" : "Edit";
   }
-  if ($("tableUndoBtn")) $("tableUndoBtn").disabled = !edit || !(state.tableUndo && state.tableUndo.length);
-  if ($("tableRedoBtn")) $("tableRedoBtn").disabled = !edit || !(state.tableRedo && state.tableRedo.length);
+  const canUndo = edit && !!(state.tableUndo && state.tableUndo.length);
+  const canRedo = edit && !!(state.tableRedo && state.tableRedo.length);
+  ["tableUndoBtn", "tableBarUndoBtn"].forEach((id) => { if ($(id)) $(id).disabled = !canUndo; });
+  ["tableRedoBtn", "tableBarRedoBtn"].forEach((id) => { if ($(id)) $(id).disabled = !canRedo; });
   if ($("tableWrap")) $("tableWrap").classList.toggle("editing", edit);
   if ($("suggestBar")) $("suggestBar").classList.toggle("hidden", !edit);
 }
@@ -1338,6 +1340,7 @@ function undoTableEdit() {
   writeTableCell(last.row, last.col, last.prev, false);
   state.tableRedo.push(last);
   refreshTableChrome();
+  if (state.tableEdit) focusTableCell(last.row, last.col, true);
 }
 
 function redoTableEdit() {
@@ -1346,6 +1349,7 @@ function redoTableEdit() {
   writeTableCell(last.row, last.col, last.val, false);
   state.tableUndo.push(last);
   refreshTableChrome();
+  if (state.tableEdit) focusTableCell(last.row, last.col, true);
 }
 
 function renderTableView() {
@@ -1537,6 +1541,8 @@ $("tableBtn") && ($("tableBtn").onclick = openTableView);
 $("tableEditBtn") && ($("tableEditBtn").onclick = toggleTableEdit);
 $("tableUndoBtn") && ($("tableUndoBtn").onclick = undoTableEdit);
 $("tableRedoBtn") && ($("tableRedoBtn").onclick = redoTableEdit);
+$("tableBarUndoBtn") && ($("tableBarUndoBtn").onclick = undoTableEdit);
+$("tableBarRedoBtn") && ($("tableBarRedoBtn").onclick = redoTableEdit);
 $("tableZoomInBtn") && ($("tableZoomInBtn").onclick = () => {
   state.tableZoom = Math.min(1.8, (state.tableZoom || 1) + 0.1);
   applyTableZoom();

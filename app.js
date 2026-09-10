@@ -1,6 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = "3.1.0";
+const APP_VERSION = "3.1.2";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const HISTORY_LIMIT = 12;
@@ -1513,6 +1513,7 @@ function openTableView() {
   state.tableEdited = {};
   state.tableZoom = state.tableZoom || 1;
   setTableViewport(true);
+  document.body.classList.add("table-open");
   $("tableModal").classList.add("open");
   renderTableView();
 }
@@ -1522,6 +1523,7 @@ function closeTableView() {
   state.tableEdit = false;
   state.tableEdited = {};
   setTableViewport(false);
+  document.body.classList.remove("table-open");
   $("tableModal").classList.remove("open");
 }
 
@@ -1669,4 +1671,6 @@ if (window.parent && window.parent !== window) {
 }
 
 loadPersistedWorkbook().catch((e) => console.error(e));
+try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+
 checkAppVersion();

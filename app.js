@@ -1,6 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "3.0.0";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const HISTORY_LIMIT = 12;

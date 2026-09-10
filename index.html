@@ -12,16 +12,16 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <meta name="app-version" content="1.8.0" />
-  <link rel="stylesheet" href="styles.css?v=1.8.0" />
+  <meta name="app-version" content="3.0.0" />
+  <link rel="stylesheet" href="styles.css?v=3.0.0" />
   <script>
-    window.APP_BUILD = "1.8.0";
+    window.APP_BUILD = "3.0.0";
     (function () {
-      if (sessionStorage.getItem("mbxl-forced") === "1.8.0") return;
+      if (sessionStorage.getItem("mbxl-forced") === "3.0.0") return;
       fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (info) {
         var need = String(info.minVersion || info.version || "");
         if (need && need !== window.APP_BUILD) {
-          sessionStorage.setItem("mbxl-forced", "1.8.0");
+          sessionStorage.setItem("mbxl-forced", "3.0.0");
           var done = Promise.resolve();
           if (navigator.serviceWorker) {
             done = navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -43,7 +43,7 @@
 </head>
 <body>
   <header class="top-header">
-    <div class="brand">Minibar XL <small id="verBadge">v1.8.0</small></div>
+    <div class="brand">Minibar XL <small id="verBadge">v3.0.0</small></div>
     <div class="header-controls">
       <div class="zone-toggle">
         <button class="toggle-btn active" id="btnBeach" data-zone="Beach">Beach</button>
@@ -196,10 +196,10 @@
   <div class="loader hidden" id="loader"><span>Working...</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script src="app.js?v=1.8.0"></script>
+  <script src="app.js?v=3.0.0"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=1.8.0", { updateViaCache: "none" }).catch(function () {});
+      navigator.serviceWorker.register("./sw.js?v=3.0.0", { updateViaCache: "none" }).catch(function () {});
     }
   </script>
 </body>
